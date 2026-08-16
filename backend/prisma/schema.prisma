@@ -1,0 +1,419 @@
+// Cafe Woody's — Prisma schema
+// Place at: backend/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────
+
+enum StaffRole {
+  ADMIN
+  WAITER
+  KITCHEN
+  COUNTER
+}
+
+enum ZoneType {
+  CAFE
+  GAMING
+}
+
+enum TableStatus {
+  FREE
+  OCCUPIED
+  RESERVED
+}
+
+enum GamingSessionStatus {
+  ACTIVE
+  CLOSED
+}
+
+enum OrderStatus {
+  OPEN
+  BILLED
+  CANCELLED
+}
+
+// Kitchen prep state — deliberately separate from OrderStatus (billing).
+// An order can be PREPARING while still OPEN, and billing timing is
+// independent of cooking progress. Tracked per-Order (one ticket), not
+// per-item — simpler for the kitchen board, revisit only if the client
+// specifically needs to see individual dishes within one order finish
+// at different times.
+enum KitchenStatus {
+  PENDING
+  PREPARING
+  READY
+  SERVED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  CARD
+  OTHER
+}
+
+enum PurchasePaymentMethod {
+  CASH
+  UPI
+  BANK_TRANSFER
+  CHEQUE
+  OTHER
+}
+
+enum InventoryUnit {
+  KG
+  G
+  L
+  ML
+  PCS
+}
+
+enum InventoryAdjustmentReason {
+  WASTAGE
+  DAMAGE
+  CORRECTION
+  OTHER
+}
+
+enum SmsStatus {
+  SENT
+  FAILED
+}
+
+// ─────────────────────────────────────────────
+// Staff & Auth
+// ─────────────────────────────────────────────
+
+model Staff {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  passwordHash String
+  role         StaffRole
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  orders Order[]
+  bills  Bill[]
+  inventoryAdjustments InventoryAdjustment[]
+}
+
+// ─────────────────────────────────────────────
+// Zones & Tables
+// ─────────────────────────────────────────────
+
+model Zone {
+  id                    String   @id @default(uuid())
+  name                  String
+  type                  ZoneType
+  defaultHalfHourRate   Int?     // paise per player, 0-30 min slab — gaming zones only
+  defaultHourlyRate     Int?     // paise per player, 31-60 min slab — gaming zones only
+  defaultMaxPlayers     Int?     // seat capacity, gaming zones only
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  tables Table[]
+}
+
+model Table {
+  id            String      @id @default(uuid())
+  zoneId        String
+  zone          Zone        @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+  name          String
+  capacity      Int
+  halfHourRate  Int?        // overrides zone.defaultHalfHourRate if set (paise)
+  hourlyRate    Int?        // overrides zone.defaultHourlyRate if set (paise)
+  maxPlayers    Int?        // overrides zone.defaultMaxPlayers if set — caps concurrent ACTIVE GamingSessions on this table
+  status        TableStatus @default(FREE)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  gamingSessions GamingSession[]
+  orders         Order[]
+  bills          Bill[]
+
+  @@index([zoneId])
+  @@index([status])
+}
+
+// One row = one PLAYER's individual gaming session at a table — not one
+// row per table. Players joining a group at different times each get
+// their own row with their own startTime, so each is billed correctly
+// for their own elapsed time (slab pricing, see calculateSlotCharge in
+// gaming-session.service.mjs). A table can have several ACTIVE
+// GamingSessions at once (one per seated player), capped by
+// table.maxPlayers / zone.defaultMaxPlayers.
+model GamingSession {
+  id                   String              @id @default(uuid())
+  tableId              String
+  table                Table               @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  billId               String?
+  bill                 Bill?               @relation(fields: [billId], references: [id], onDelete: SetNull)
+  playerLabel          String?             // optional display label ("Player 3") for staff UI only, not used in billing
+  halfHourRateSnapshot Int                 // paise, 0-30 min slab rate — snapshotted at session start, never re-read live
+  hourlyRateSnapshot   Int                 // paise, 31-60 min slab rate — snapshotted at session start, never re-read live
+  maxChargeCap         Int?                // paise, optional per-player cap — snapshotted at session start
+  startTime            DateTime            @default(now())
+  endTime              DateTime?
+  status               GamingSessionStatus @default(ACTIVE)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  @@index([tableId])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────
+// Menu, Recipes, Inventory
+// ─────────────────────────────────────────────
+
+model MenuItem {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  price       Int      // paise
+  imageUrl    String?  // Cloudinary URL
+  category    String
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  recipeIngredients RecipeIngredient[]
+  orderItems        OrderItem[]
+}
+
+model InventoryItem {
+  id                String        @id @default(uuid())
+  name              String
+  unit              InventoryUnit
+  stockQuantity     Decimal       @default(0) // supports fractional kg/l
+  reorderThreshold  Decimal       @default(0)
+  costPerUnit       Int           // paise, latest known cost
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  recipeIngredients  RecipeIngredient[]
+  purchaseOrderItems PurchaseOrderItem[]
+  adjustments        InventoryAdjustment[]
+
+  @@index([stockQuantity])
+}
+
+// Manual stock corrections — wastage, breakage, spillage, or a
+// stocktake correction. This is separate from order-driven deduction
+// and purchase-driven stock-in, and exists specifically so those two
+// automatic flows stay clean while still allowing staff to account for
+// real-world loss. delta is signed: negative for wastage/loss, positive
+// for a stocktake correction that finds more stock than recorded.
+model InventoryAdjustment {
+  id              String                    @id @default(uuid())
+  inventoryItemId String
+  inventoryItem   InventoryItem             @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  delta           Decimal                   // signed — negative = loss, positive = correction upward
+  reason          InventoryAdjustmentReason
+  note            String?
+  staffId         String
+  staff           Staff                     @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  createdAt       DateTime                  @default(now())
+
+  @@index([inventoryItemId])
+}
+
+// Join table: which ingredients (and how much) a menu item consumes
+model RecipeIngredient {
+  id              String        @id @default(uuid())
+  menuItemId      String
+  menuItem        MenuItem      @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  inventoryItemId String
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  quantity        Decimal       // amount of inventoryItem.unit consumed per one MenuItem sold
+  createdAt       DateTime      @default(now())
+
+  @@unique([menuItemId, inventoryItemId])
+  @@index([inventoryItemId])
+}
+
+// ─────────────────────────────────────────────
+// Purchasing (raw material stock-in)
+// ─────────────────────────────────────────────
+
+model Supplier {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  purchaseOrders PurchaseOrder[]
+}
+
+model PurchaseOrder {
+  id            String        @id @default(uuid())
+  supplierId    String
+  supplier      Supplier      @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchaseDate  DateTime      @default(now())
+  totalCost     Int           // paise, sum of line items
+  paymentStatus PaymentStatus @default(UNPAID) // recompute from sum(payments.amount) vs totalCost — same pattern as Bill
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  items    PurchaseOrderItem[]
+  payments PurchasePayment[]
+
+  @@index([supplierId])
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(uuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  inventoryItemId String
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  quantity        Decimal
+  costPerUnit     Int           // paise, cost at time of this purchase
+  createdAt       DateTime      @default(now())
+
+  @@index([inventoryItemId])
+}
+
+// ─────────────────────────────────────────────
+// Customers (mini CRM)
+// ─────────────────────────────────────────────
+
+model Customer {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String   @unique
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders  Order[]
+  bills   Bill[]
+  smsLogs SmsLog[]
+}
+
+model SmsLog {
+  id         String    @id @default(uuid())
+  customerId String
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  phone      String
+  message    String
+  status     SmsStatus
+  sentAt     DateTime  @default(now())
+
+  @@index([customerId])
+}
+
+// ─────────────────────────────────────────────
+// Orders & Billing
+// ─────────────────────────────────────────────
+
+model Order {
+  id            String        @id @default(uuid())
+  tableId       String
+  table         Table         @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  customerId    String?
+  customer      Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  staffId       String
+  staff         Staff         @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  billId        String?
+  bill          Bill?         @relation(fields: [billId], references: [id], onDelete: SetNull)
+  status        OrderStatus   @default(OPEN)
+  kitchenStatus KitchenStatus @default(PENDING)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  items OrderItem[]
+
+  @@index([tableId])
+  @@index([status])
+  @@index([kitchenStatus])
+}
+
+model OrderItem {
+  id             String   @id @default(uuid())
+  orderId        String
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId     String
+  menuItem       MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
+  quantity       Int
+  priceSnapshot  Int      // paise, MenuItem.price at time of order — never re-read live price for historical orders
+  createdAt      DateTime @default(now())
+
+  @@index([orderId])
+}
+
+model Bill {
+  id              String        @id @default(uuid())
+  tableId         String
+  table           Table         @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  customerId      String?
+  customer        Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  staffId         String
+  staff           Staff         @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  foodTotal       Int           @default(0) // paise
+  gamingTotal     Int           @default(0) // paise
+  taxAmount       Int           @default(0) // paise
+  discountAmount  Int           @default(0) // paise
+  grandTotal      Int           // paise
+  paymentStatus   PaymentStatus @default(UNPAID) // recompute in payment.service.mjs whenever a Payment is added — UNPAID (0 paid), PARTIALLY_PAID (0 < paid < grandTotal), PAID (paid >= grandTotal)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  orders         Order[]
+  gamingSessions GamingSession[]
+  payments       Payment[]
+
+  @@index([tableId])
+  @@index([paymentStatus])
+}
+
+// A bill can be settled with more than one payment — split tender
+// (part cash + part UPI) or a partial payment followed by a later
+// top-up. Never assume one Payment per Bill.
+model Payment {
+  id        String        @id @default(uuid())
+  billId    String
+  bill      Bill          @relation(fields: [billId], references: [id], onDelete: Restrict)
+  amount    Int           // paise — this single payment's amount, not the bill total
+  method    PaymentMethod
+  reference String?       // UPI txn id / card auth code / free note, optional
+  paidAt    DateTime      @default(now())
+  createdAt DateTime      @default(now())
+
+  @@index([billId])
+}
+
+// Money paid OUT to a supplier, tracked per PurchaseOrder — mirrors the
+// Bill/Payment pattern but for the outgoing side. Supports split/partial
+// payments to suppliers the same way (e.g. advance now, balance later).
+model PurchasePayment {
+  id              String                @id @default(uuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder         @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  amount          Int                   // paise
+  method          PurchasePaymentMethod
+  reference       String?               // cheque no. / bank txn ref / free note
+  paidAt          DateTime              @default(now())
+  createdAt       DateTime              @default(now())
+
+  @@index([purchaseOrderId])
+}

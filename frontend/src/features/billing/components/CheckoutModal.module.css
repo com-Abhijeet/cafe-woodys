@@ -1,0 +1,152 @@
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 250;
+  padding: var(--space-4);
+}
+
+.modal {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 800px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  overflow: hidden;
+}
+
+.header {
+  padding: var(--space-4) var(--space-5);
+  background-color: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title {
+  font-size: var(--text-xl);
+  font-weight: 800;
+  color: var(--color-brand);
+  margin: 0;
+}
+
+.body {
+  padding: var(--space-5);
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: var(--space-5);
+  flex: 1;
+}
+
+@media (max-width: 768px) {
+  .body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.billSummary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.lineSection {
+  background-color: var(--color-bg);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  padding: var(--space-4);
+}
+
+.lineTitle {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-brand);
+  margin-bottom: var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lineItem {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-sm);
+  padding: 4px 0;
+}
+
+.totalBanner {
+  background-color: var(--color-bg);
+  border: 2px solid var(--color-brand);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.grandTotal {
+  font-size: var(--text-2xl);
+  font-weight: 800;
+  color: var(--color-brand);
+}
+
+.paymentPanel {
+  background-color: var(--color-bg);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.methodSelector {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.methodBtn {
+  flex: 1;
+  min-height: 40px;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.activeMethod {
+  background-color: var(--color-brand);
+  color: #ffffff;
+  border-color: var(--color-brand);
+}
+
+.paidSuccessBox {
+  background-color: rgba(46, 125, 79, 0.12);
+  border: 1px solid var(--color-success);
+  color: var(--color-success);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  text-align: center;
+  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}

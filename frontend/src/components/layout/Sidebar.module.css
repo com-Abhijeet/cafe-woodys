@@ -1,0 +1,137 @@
+.sidebar {
+  width: 240px;
+  height: 100vh;
+  background-color: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 60;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--shadow-card);
+}
+
+.collapsedSidebar {
+  width: 72px;
+}
+
+.sidebarHeader {
+  height: 64px;
+  padding: 0 var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.brandTitle {
+  font-size: var(--text-lg);
+  font-weight: 800;
+  color: var(--color-brand);
+  margin: 0;
+}
+
+.toggleBtn {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+}
+
+.toggleBtn:hover {
+  background-color: var(--color-bg);
+  color: var(--color-brand);
+}
+
+.navContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-3) var(--space-2);
+  flex: 1;
+  overflow-y: auto;
+}
+
+.navItem {
+  min-height: 48px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  border: none;
+  background-color: transparent;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.navItem:hover:not(:disabled) {
+  background-color: rgba(107, 63, 42, 0.06);
+}
+
+.activeNavItem {
+  background-color: rgba(107, 63, 42, 0.12) !important;
+}
+
+.disabledNavItem {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.iconContainer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  flex-shrink: 0;
+}
+
+.itemLabel {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.activeNavItem .itemLabel {
+  color: var(--color-brand);
+}
+
+.badge {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-bg);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+}
+
+.sidebarFooter {
+  padding: var(--space-3) var(--space-2);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
