@@ -20,6 +20,7 @@ export function ZoneTableManager() {
   const [defaultHalfHourRs, setDefaultHalfHourRs] = useState('');
   const [defaultHourlyRs, setDefaultHourlyRs] = useState('');
   const [defaultMaxPlayers, setDefaultMaxPlayers] = useState('');
+  const [zoneGstPercent, setZoneGstPercent] = useState('');
 
   // Table form
   const [tableName, setTableName] = useState('');
@@ -35,6 +36,7 @@ export function ZoneTableManager() {
     setDefaultHalfHourRs('');
     setDefaultHourlyRs('');
     setDefaultMaxPlayers('');
+    setZoneGstPercent('');
     setActiveModal('ADD_ZONE');
   };
 
@@ -45,6 +47,7 @@ export function ZoneTableManager() {
     setDefaultHalfHourRs(zone.defaultHalfHourRate ? zone.defaultHalfHourRate / 100 : '');
     setDefaultHourlyRs(zone.defaultHourlyRate ? zone.defaultHourlyRate / 100 : '');
     setDefaultMaxPlayers(zone.defaultMaxPlayers || '');
+    setZoneGstPercent(zone.gstPercent != null ? zone.gstPercent.toString() : '');
     setActiveModal('EDIT_ZONE');
   };
 
@@ -56,7 +59,8 @@ export function ZoneTableManager() {
       type: zoneType,
       defaultHalfHourRate: defaultHalfHourRs ? Math.round(parseFloat(defaultHalfHourRs) * 100) : null,
       defaultHourlyRate: defaultHourlyRs ? Math.round(parseFloat(defaultHourlyRs) * 100) : null,
-      defaultMaxPlayers: defaultMaxPlayers ? parseInt(defaultMaxPlayers) : null
+      defaultMaxPlayers: defaultMaxPlayers ? parseInt(defaultMaxPlayers) : null,
+      gstPercent: zoneGstPercent !== '' ? parseFloat(zoneGstPercent) : null
     };
 
     try {
@@ -145,7 +149,7 @@ export function ZoneTableManager() {
         <div className={styles.sectionHeader}>
           <div>
             <h2 className={styles.sectionTitle}>Floor Zones</h2>
-            <p className={styles.sectionSubtitle}>Define pricing tiers & zone categories</p>
+            <p className={styles.sectionSubtitle}>Define pricing tiers, custom GST rates & zone categories</p>
           </div>
           <Button onClick={openAddZone}>
             <Plus size={16} /> Add Zone
@@ -162,7 +166,7 @@ export function ZoneTableManager() {
                 </span>
               </div>
               <div className={styles.itemMeta}>
-                Tables: <strong>{zone.tables?.length || 0}</strong>
+                Tables: <strong>{zone.tables?.length || 0}</strong> • GST: <strong>{zone.gstPercent != null ? `${zone.gstPercent}%` : 'Default Fallback'}</strong>
               </div>
               {zone.type === 'GAMING' && (
                 <div className={styles.itemMeta}>
@@ -243,6 +247,8 @@ export function ZoneTableManager() {
                   </label>
                 </div>
               </div>
+
+              <Input label="Zone GST Rate % (optional — leave empty for default fallback)" type="number" step="0.5" value={zoneGstPercent} onChange={(e) => setZoneGstPercent(e.target.value)} placeholder="e.g. 18 for Gaming zone" />
 
               {zoneType === 'GAMING' && (
                 <>

@@ -443,3 +443,41 @@
   font-size: var(--text-xs);
   color: var(--color-text-secondary);
 }
+
+/* Mobile & Small Screen Vertical Stacking Styles */
+@media (max-width: 768px) {
+  .workspaceBody {
+    flex-direction: column !important;
+    overflow-y: auto !important;
+  }
+
+  .categorySidebar {
+    width: 100% !important;
+    flex-direction: row !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--color-border) !important;
+    padding: var(--space-2) !important;
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+  }
+
+  .categoryBtn {
+    padding: 6px 12px !important;
+    font-size: 11px !important;
+  }
+
+  .centerArea {
+    border-right: none !important;
+    overflow-y: auto !important;
+  }
+
+  .menuGrid {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .cartPanel {
+    width: 100% !important;
+    border-top: 1px solid var(--color-border) !important;
+  }
+}

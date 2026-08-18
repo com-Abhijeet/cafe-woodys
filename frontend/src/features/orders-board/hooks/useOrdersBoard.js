@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { fetchActiveOrdersApi, updateKitchenStatusApi, cancelOrderApi } from '../api/orders-board.api';
+import { fetchActiveOrdersApi, updateKitchenStatusApi, cancelOrderApi, closeDayApi } from '../api/orders-board.api';
 import { useWebSocket } from '../../../hooks/useWebSocket';
 import { soundAlerts } from '../../../lib/soundAlerts';
 
@@ -68,9 +68,16 @@ export function useOrdersBoard() {
       }
     });
 
+    const unsubscribeCleared = subscribe('ORDER_BOARD_CLEARED', () => {
+      setOrders([]);
+      setToastMessage(`🌅 Order board cleared for the new day.`);
+      setTimeout(() => setToastMessage(null), 5000);
+    });
+
     return () => {
       if (unsubscribeCreated) unsubscribeCreated();
       if (unsubscribeUpdated) unsubscribeUpdated();
+      if (unsubscribeCleared) unsubscribeCleared();
     };
   }, [subscribe]);
 
@@ -98,6 +105,14 @@ export function useOrdersBoard() {
     }
   };
 
+  const closeDay = async (force = false) => {
+    const res = await closeDayApi(force);
+    if (res.canClose) {
+      setOrders([]);
+    }
+    return res;
+  };
+
   return {
     orders,
     isLoading,
@@ -107,6 +122,7 @@ export function useOrdersBoard() {
     toastMessage,
     refreshOrders: loadOrders,
     advanceKitchenStatus,
-    cancelOrder
+    cancelOrder,
+    closeDay
   };
 }

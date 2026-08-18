@@ -1,21 +1,39 @@
 import { gamingSessionRepository } from './gaming-session.repository.mjs';
 import { tableService } from '../table/table.service.mjs';
 import { tableRepository } from '../table/table.repository.mjs';
+import { businessProfileService } from '../business-profile/business-profile.service.mjs';
 import { broadcastGamingSessionUpdate, broadcastTableUpdate } from '../../realtime/broadcast.mjs';
 import { NotFoundError } from '../../shared/errors/not-found-error.mjs';
 import { ValidationError } from '../../shared/errors/validation-error.mjs';
 import { ConflictError } from '../../shared/errors/conflict-error.mjs';
 
 /**
- * Slab Pricing Calculator:
+ * Applies a grace window at each 30-minute slab boundary.
+ * e.g. 32 mins with 5m grace -> 30 mins (1 half-hour slab)
+ * e.g. 63 mins with 5m grace -> 60 mins (1 hour slab)
+ * e.g. 95 mins with 5m grace -> 90 mins (1 hr + 30m)
+ */
+export function applyGracePeriod(elapsedMinutes, graceMinutes = 5) {
+  if (elapsedMinutes <= 0) return 0;
+  const remainderInto30 = elapsedMinutes % 30;
+  if (remainderInto30 > 0 && remainderInto30 <= graceMinutes) {
+    return elapsedMinutes - remainderInto30;
+  }
+  return elapsedMinutes;
+}
+
+/**
+ * Slab Pricing Calculator with Grace Period:
  * 0-30 min -> halfHourRate
  * 31-60 min -> hourlyRate
  * 61-90 min -> hourlyRate + halfHourRate
  * 91-120 min -> 2 * hourlyRate
  * Clamped by maxChargeCap if defined.
  */
-export function calculateSlotCharge(elapsedMinutes, halfHourRate, hourlyRate, maxChargeCap = null) {
-  if (elapsedMinutes <= 0) return 0;
+export function calculateSlotCharge(elapsedMinutesRaw, halfHourRate, hourlyRate, maxChargeCap = null, graceMinutes = 5) {
+  if (elapsedMinutesRaw <= 0) return 0;
+
+  const elapsedMinutes = applyGracePeriod(elapsedMinutesRaw, graceMinutes);
 
   const fullHours = Math.floor(elapsedMinutes / 60);
   const remainder = elapsedMinutes % 60;
@@ -39,6 +57,9 @@ export const gamingSessionService = {
       throw new NotFoundError('Table not found', 'TABLE_NOT_FOUND');
     }
 
+    const profile = await businessProfileService.getProfile();
+    const graceMinutes = profile?.gamingGracePeriodMinutes ?? 5;
+
     const sessions = await gamingSessionRepository.findActiveByTableId(tableId);
     const now = new Date();
 
@@ -48,7 +69,8 @@ export const gamingSessionService = {
         elapsedMinutes,
         session.halfHourRateSnapshot,
         session.hourlyRateSnapshot,
-        session.maxChargeCap
+        session.maxChargeCap,
+        graceMinutes
       );
 
       return {
@@ -79,6 +101,10 @@ export const gamingSessionService = {
       );
     }
 
+    const profile = await businessProfileService.getProfile();
+    const defaultGst = profile ? profile.defaultGstPercent : 5;
+    const gstPercentSnapshot = table.zone?.gstPercent != null ? Number(table.zone.gstPercent) : defaultGst;
+
     const halfHourRateSnapshot = table.effectiveHalfHourRate || 0;
     const hourlyRateSnapshot = table.effectiveHourlyRate || 0;
     const label = playerLabel?.trim() || `Player ${activeCount + 1}`;
@@ -89,6 +115,7 @@ export const gamingSessionService = {
       halfHourRateSnapshot,
       hourlyRateSnapshot,
       maxChargeCap: table.maxChargeCap || null,
+      gstPercentSnapshot,
       status: 'ACTIVE',
       startTime: new Date()
     });
@@ -109,7 +136,7 @@ export const gamingSessionService = {
     };
   },
 
-  async closePlayerSession(tableId, sessionId) {
+  async closePlayerSession(tableId, sessionId, options = {}) {
     const session = await gamingSessionRepository.findById(sessionId);
     if (!session || session.tableId !== tableId) {
       throw new NotFoundError('Gaming session not found for this table', 'SESSION_NOT_FOUND');
@@ -119,16 +146,43 @@ export const gamingSessionService = {
       throw new ConflictError('Gaming session is already closed', 'SESSION_ALREADY_CLOSED');
     }
 
-    const endTime = new Date();
-    const elapsedMinutes = Math.max(1, Math.ceil((endTime - new Date(session.startTime)) / (1000 * 60)));
+    const now = new Date();
+    let targetEndTime = now;
+
+    if (options.endTime) {
+      const parsedEndTime = new Date(options.endTime);
+      if (isNaN(parsedEndTime.getTime())) {
+        throw new ValidationError('Invalid session end time format', 'INVALID_END_TIME');
+      }
+      if (parsedEndTime < new Date(session.startTime)) {
+        throw new ValidationError('Session end time cannot be before start time', 'END_BEFORE_START');
+      }
+      if (parsedEndTime > now) {
+        throw new ValidationError('Session end time cannot be in the future', 'FUTURE_END_TIME');
+      }
+
+      const diffMs = now.getTime() - parsedEndTime.getTime();
+      const maxBackdateMs = 60 * 60 * 1000; // 60 minutes
+      if (diffMs > maxBackdateMs) {
+        throw new ValidationError('Session end time cannot be backdated by more than 60 minutes', 'EXCESSIVE_BACKDATE');
+      }
+
+      targetEndTime = parsedEndTime;
+    }
+
+    const profile = await businessProfileService.getProfile();
+    const graceMinutes = profile?.gamingGracePeriodMinutes ?? 5;
+
+    const elapsedMinutes = Math.max(1, Math.ceil((targetEndTime - new Date(session.startTime)) / (1000 * 60)));
     const calculatedCharge = calculateSlotCharge(
       elapsedMinutes,
       session.halfHourRateSnapshot,
       session.hourlyRateSnapshot,
-      session.maxChargeCap
+      session.maxChargeCap,
+      graceMinutes
     );
 
-    const closed = await gamingSessionRepository.closeSession(sessionId, endTime);
+    const closed = await gamingSessionRepository.closeSession(sessionId, targetEndTime);
     const updatedTable = await tableService.getTableById(tableId);
     broadcastGamingSessionUpdate(closed);
     broadcastTableUpdate(updatedTable);

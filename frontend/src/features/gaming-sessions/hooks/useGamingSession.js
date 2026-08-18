@@ -57,8 +57,8 @@ export function useGamingSession(tableId) {
     return newSession;
   };
 
-  const closeSession = async (sessionId) => {
-    const closed = await closePlayerSessionApi(tableId, sessionId);
+  const closeSession = async (sessionId, endTime) => {
+    const closed = await closePlayerSessionApi(tableId, sessionId, endTime);
     await fetchSessions();
     return closed;
   };

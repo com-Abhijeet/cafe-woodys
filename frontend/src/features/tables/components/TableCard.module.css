@@ -11,7 +11,7 @@
   gap: var(--space-3);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
   user-select: none;
-  min-height: 190px;
+  min-height: 200px;
   box-sizing: border-box;
 }
 
@@ -19,12 +19,13 @@
   transform: scale(0.99);
 }
 
+/* Zone distinction lives strictly in the zone badge pill, not a side-stripe */
 .cafeAccent {
-  border-left: 6px solid var(--color-cafe-zone);
+  border-left: 1px solid var(--color-border);
 }
 
 .gamingAccent {
-  border-left: 6px solid var(--color-gaming-zone);
+  border-left: 1px solid var(--color-border);
 }
 
 .header {

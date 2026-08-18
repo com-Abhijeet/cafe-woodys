@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useGamingSession } from '../../gaming-sessions/hooks/useGamingSession';
 import { Input } from '../../../components/ui/Input/Input';
 import { Button } from '../../../components/ui/Button/Button';
-import { Gamepad2, Plus, Clock, AlertCircle } from 'lucide-react';
+import { Gamepad2, Plus, Clock, AlertCircle, Check, X } from 'lucide-react';
 import styles from './TableWorkspaceModal.module.css';
 
 export function PlayerSessionsPanel({ table, onRefreshTable }) {
@@ -19,6 +19,10 @@ export function PlayerSessionsPanel({ table, onRefreshTable }) {
   const [playerLabel, setPlayerLabel] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionError, setActionError] = useState('');
+
+  // End Session Backdate Modal / Active Selection State
+  const [closingSession, setClosingSession] = useState(null); // session object
+  const [backdateMinutes, setBackdateMinutes] = useState(0);
 
   const maxPlayers = table.effectiveMaxPlayers || 4;
   const activeCount = sessions.length;
@@ -39,15 +43,30 @@ export function PlayerSessionsPanel({ table, onRefreshTable }) {
     }
   };
 
-  const handleCloseSession = async (sessionId, name) => {
-    if (!confirm(`End gaming session for ${name}?`)) return;
+  const handleConfirmCloseSession = async () => {
+    if (!closingSession) return;
     setActionError('');
+    setIsSubmitting(true);
+
     try {
-      const closed = await closeSession(sessionId);
-      alert(`Session ended for ${name}.\nElapsed: ${closed.elapsedMinutes} mins\nCharge: ₹${(closed.calculatedCharge / 100).toFixed(2)}`);
+      let endTimeIso = null;
+      if (backdateMinutes > 0) {
+        const d = new Date();
+        d.setMinutes(d.getMinutes() - backdateMinutes);
+        endTimeIso = d.toISOString();
+      }
+
+      const closed = await closeSession(closingSession.id, endTimeIso);
+      alert(
+        `Session ended for ${closingSession.playerLabel}.\nElapsed: ${closed.elapsedMinutes} mins\nCharge: ₹${(closed.calculatedCharge / 100).toFixed(2)}`
+      );
+      setClosingSession(null);
+      setBackdateMinutes(0);
       if (onRefreshTable) onRefreshTable();
     } catch (err) {
       setActionError(err.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -110,13 +129,94 @@ export function PlayerSessionsPanel({ table, onRefreshTable }) {
                   <span style={{ fontWeight: 800, fontSize: 'var(--text-xs)', color: 'var(--color-brand)' }}>
                     Est. ₹{(estCharge / 100).toFixed(2)}
                   </span>
-                  <Button variant="danger" onClick={() => handleCloseSession(session.id, session.playerLabel)} style={{ padding: '2px 8px', fontSize: 'var(--text-xs)', minHeight: '28px' }}>
-                    End
+                  <Button
+                    variant="danger"
+                    onClick={() => { setClosingSession(session); setBackdateMinutes(0); }}
+                    style={{ padding: '2px 8px', fontSize: 'var(--text-xs)', minHeight: '28px' }}
+                  >
+                    End Session
                   </Button>
                 </div>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Manual End-Time / Backdate Dialog Modal */}
+      {closingSession && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1100
+        }}>
+          <div style={{
+            backgroundColor: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-lg)',
+            padding: 'var(--space-4)',
+            maxWidth: '400px',
+            width: '90%',
+            boxShadow: 'var(--shadow-lg)'
+          }}>
+            <h3 style={{ margin: 0, fontSize: 'var(--text-base)', color: 'var(--color-brand)' }}>
+              End Session for {closingSession.playerLabel}
+            </h3>
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
+              Select session stop time. Default is now, or back-date up to 60 minutes if checkout was delayed.
+            </p>
+
+            <div style={{ margin: '16px 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label style={{ fontSize: 'var(--text-xs)', fontWeight: 700 }}>Adjust Stop Time:</label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+                {[0, 5, 10, 15].map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setBackdateMinutes(m)}
+                    style={{
+                      padding: '6px',
+                      borderRadius: '6px',
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: 700,
+                      border: '1px solid var(--color-border)',
+                      backgroundColor: backdateMinutes === m ? 'var(--color-brand)' : 'var(--color-bg)',
+                      color: backdateMinutes === m ? '#ffffff' : 'var(--color-text-primary)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {m === 0 ? 'Now' : `-${m}m`}
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>Custom back-date (mins):</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="60"
+                  value={backdateMinutes}
+                  onChange={(e) => setBackdateMinutes(Math.min(60, Math.max(0, parseInt(e.target.value, 10) || 0)))}
+                  style={{ width: '70px', padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--color-border)', fontSize: 'var(--text-xs)' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
+              <Button variant="secondary" onClick={() => setClosingSession(null)}>Cancel</Button>
+              <Button onClick={handleConfirmCloseSession} disabled={isSubmitting}>
+                {isSubmitting ? 'Closing...' : 'Confirm & End Session'}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

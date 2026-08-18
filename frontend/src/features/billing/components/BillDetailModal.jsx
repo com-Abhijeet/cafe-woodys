@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { useBilling } from '../hooks/useBilling';
+import { useAuth } from '../../../hooks/useAuth';
 import { printBillViaRawBT } from '../../../lib/rawbtPrinter';
 import { Input } from '../../../components/ui/Input/Input';
 import { Button } from '../../../components/ui/Button/Button';
-import { X, Receipt, Printer, CheckCircle2, Clock, Plus, CreditCard, User } from 'lucide-react';
+import { X, Receipt, Printer, CheckCircle2, Clock, Plus, CreditCard, User, AlertOctagon, Ban } from 'lucide-react';
 import styles from './CheckoutModal.module.css';
 
 export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
-  const { currentBill, submitPayment, loadBill } = useBilling();
+  const { user } = useAuth();
+  const { currentBill, submitPayment, voidBill } = useBilling();
   const activeBill = currentBill || initialBill;
 
   const [paymentMethod, setPaymentMethod] = useState('CASH');
@@ -18,9 +20,18 @@ export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionError, setActionError] = useState('');
 
+  // Voiding State
+  const [showVoidModal, setShowVoidModal] = useState(false);
+  const [voidReason, setVoidReason] = useState('');
+
   if (!activeBill) return null;
 
+  const isAdmin = user?.role === 'ADMIN';
+  const isVoided = !!activeBill.voidedAt;
   const isPaid = activeBill.paymentStatus === 'PAID';
+  const invoiceTitle = typeof activeBill.invoiceNumber === 'number'
+    ? `Invoice #${activeBill.invoiceNumber} (${activeBill.financialYear || ''})`
+    : (activeBill.invoiceNumber || `Bill #${activeBill.id.slice(-6).toUpperCase()}`);
 
   const handleRecordPayment = async (e) => {
     e.preventDefault();
@@ -48,6 +59,25 @@ export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
     }
   };
 
+  const handleConfirmVoid = async (e) => {
+    e.preventDefault();
+    if (!voidReason.trim()) {
+      setActionError('Reason is mandatory when voiding an issued bill');
+      return;
+    }
+    setActionError('');
+    setIsSubmitting(true);
+    try {
+      await voidBill(activeBill.id, voidReason);
+      setShowVoidModal(false);
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleReprint = () => {
     printBillViaRawBT(activeBill);
   };
@@ -58,9 +88,11 @@ export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
         {/* Header */}
         <div className={styles.header}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Receipt color="var(--color-brand)" size={22} />
+            <Receipt color={isVoided ? 'var(--color-danger)' : 'var(--color-brand)'} size={22} />
             <div>
-              <h2 className={styles.title}>Bill #{activeBill.id.slice(-6).toUpperCase()}</h2>
+              <h2 className={styles.title} style={{ color: isVoided ? 'var(--color-danger)' : 'inherit' }}>
+                {invoiceTitle} {isVoided && '(VOIDED)'}
+              </h2>
               <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>
                 {activeBill.table?.name} • Created {new Date(activeBill.createdAt).toLocaleString()}
               </div>
@@ -68,14 +100,30 @@ export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+            {isAdmin && !isVoided && (
+              <Button variant="danger" onClick={() => { setActionError(''); setShowVoidModal(true); }} style={{ padding: '6px 12px', fontSize: 'var(--text-xs)' }}>
+                <Ban size={14} /> Void Bill
+              </Button>
+            )}
             <Button variant="secondary" onClick={handleReprint} style={{ padding: '6px 12px', fontSize: 'var(--text-xs)' }}>
-              <Printer size={14} /> Reprint Receipt
+              <Printer size={14} /> Print Invoice
             </Button>
             <button style={{ background: 'none', border: 'none', cursor: 'pointer' }} onClick={onClose}>
               <X size={20} />
             </button>
           </div>
         </div>
+
+        {/* Voided Alert Banner if Voided */}
+        {isVoided && (
+          <div style={{ backgroundColor: 'rgba(196,57,43,0.12)', border: '1px solid var(--color-danger)', color: 'var(--color-danger)', padding: '10px 16px', margin: '12px 16px 0 16px', borderRadius: '6px', fontSize: 'var(--text-xs)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AlertOctagon size={18} />
+            <div>
+              <div>THIS INVOICE WAS VOIDED ON {new Date(activeBill.voidedAt).toLocaleString()}</div>
+              <div style={{ fontSize: '10px', fontWeight: 600, marginTop: '2px' }}>Reason: {activeBill.voidReason || 'None provided'}</div>
+            </div>
+          </div>
+        )}
 
         {/* Body */}
         <div className={styles.body}>
@@ -101,7 +149,7 @@ export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
                   <div key={ord.id}>
                     {ord.items.map((i) => (
                       <div key={i.id} className={styles.lineItem}>
-                        <span>{i.quantity}x {i.menuItem?.name || 'Item'}</span>
+                        <span>{i.quantity}x {i.menuItem?.name || 'Item'} (GST {i.gstPercentSnapshot ?? '5'}%)</span>
                         <span>₹{((i.priceSnapshot * i.quantity) / 100).toFixed(2)}</span>
                       </div>
                     ))}
@@ -119,18 +167,36 @@ export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
                 </div>
                 {activeBill.gamingSessions.map((session) => (
                   <div key={session.id} className={styles.lineItem}>
-                    <span>Player: <strong>{session.playerLabel}</strong></span>
+                    <span>Player: <strong>{session.playerLabel}</strong> (GST {session.gstPercentSnapshot ?? '18'}%)</span>
                     <span>Rate: ₹{session.halfHourRateSnapshot / 100}/30m</span>
                   </div>
                 ))}
               </div>
             )}
 
+            {/* GST Tax & Discount Breakdown */}
+            <div style={{ backgroundColor: 'var(--color-bg)', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--color-border)', margin: '10px 0', fontSize: 'var(--text-xs)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              {activeBill.discountAmount > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-danger)', fontWeight: 700 }}>
+                  <span>Discount ({activeBill.discountReason || 'Manual'}):</span>
+                  <span>-₹{(activeBill.discountAmount / 100).toFixed(2)}</span>
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-text-secondary)' }}>
+                <span>CGST:</span>
+                <span>₹{((activeBill.cgstAmount || 0) / 100).toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-text-secondary)' }}>
+                <span>SGST:</span>
+                <span>₹{((activeBill.sgstAmount || 0) / 100).toFixed(2)}</span>
+              </div>
+            </div>
+
             {/* Grand Total Banner */}
-            <div className={styles.totalBanner}>
+            <div className={styles.totalBanner} style={{ opacity: isVoided ? 0.6 : 1 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
-                  Total Bill Amount
+                  Grand Total
                 </span>
                 <span className={styles.grandTotal}>
                   ₹{(activeBill.grandTotal / 100).toFixed(2)}
@@ -138,8 +204,8 @@ export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
                 <span>Total Paid: ₹{(activeBill.totalPaid / 100).toFixed(2)}</span>
-                <span style={{ fontWeight: 700, color: isPaid ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                  Balance Due: ₹{(activeBill.remainingBalance / 100).toFixed(2)}
+                <span style={{ fontWeight: 700, color: isVoided ? 'var(--color-danger)' : (isPaid ? 'var(--color-success)' : 'var(--color-danger)') }}>
+                  {isVoided ? 'VOIDED' : `Balance Due: ₹${(activeBill.remainingBalance / 100).toFixed(2)}`}
                 </span>
               </div>
             </div>
@@ -153,12 +219,17 @@ export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
 
             {actionError && <div style={{ color: 'var(--color-danger)', fontSize: 'var(--text-xs)' }}>{actionError}</div>}
 
-            {isPaid ? (
+            {isVoided ? (
+              <div className={styles.paidSuccessBox} style={{ borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>
+                <Ban size={36} />
+                <div>This bill has been voided. No further payments can be added.</div>
+              </div>
+            ) : isPaid ? (
               <div className={styles.paidSuccessBox}>
                 <CheckCircle2 size={36} />
                 <div>Bill Fully Paid & Settled</div>
                 <Button onClick={handleReprint} style={{ marginTop: 'var(--space-2)' }}>
-                  <Printer size={16} /> Reprint Thermal Receipt
+                  <Printer size={16} /> Reprint Thermal Invoice
                 </Button>
               </div>
             ) : (
@@ -226,6 +297,56 @@ export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
             )}
           </div>
         </div>
+
+        {/* Modal: Void Reason Dialog */}
+        {showVoidModal && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1200
+          }}>
+            <form onSubmit={handleConfirmVoid} style={{
+              backgroundColor: 'var(--color-surface)',
+              border: '1px solid var(--color-danger)',
+              borderRadius: 'var(--radius-lg)',
+              padding: 'var(--space-4)',
+              maxWidth: '420px',
+              width: '90%',
+              boxShadow: 'var(--shadow-lg)'
+            }}>
+              <h3 style={{ margin: 0, color: 'var(--color-danger)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Ban size={20} /> Void Bill {invoiceTitle}
+              </h3>
+              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
+                Voiding a bill preserves its invoice number for financial auditing while invalidating its total. A mandatory reason is required.
+              </p>
+
+              <div style={{ margin: '16px 0' }}>
+                <Input
+                  label="Mandatory Void Reason"
+                  value={voidReason}
+                  onChange={(e) => setVoidReason(e.target.value)}
+                  placeholder="e.g. Order cancelled by customer / Duplicate bill entry"
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <Button type="button" variant="secondary" onClick={() => setShowVoidModal(false)}>Cancel</Button>
+                <Button type="submit" variant="danger" disabled={isSubmitting}>
+                  {isSubmitting ? 'Voiding...' : 'Confirm Void Invoice'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        )}
       </div>
     </div>
   );

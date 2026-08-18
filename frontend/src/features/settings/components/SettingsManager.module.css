@@ -1,0 +1,88 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.title {
+  font-size: var(--text-2xl);
+  font-weight: 800;
+  color: var(--color-brand);
+  margin: 0;
+}
+
+.subtitle {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  margin-top: 4px;
+}
+
+.tabBar {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 8px;
+}
+
+.tabBtn {
+  background: none;
+  border: none;
+  padding: 8px 16px;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tabBtn:hover {
+  color: var(--color-brand);
+  background-color: rgba(107, 63, 42, 0.05);
+}
+
+.activeTab {
+  color: #ffffff !important;
+  background-color: var(--color-brand) !important;
+}
+
+.formSection {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  box-shadow: var(--shadow-card);
+}
+
+.errorMessage {
+  background-color: rgba(196, 57, 43, 0.1);
+  color: var(--color-danger);
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.successMessage {
+  background-color: rgba(46, 125, 79, 0.1);
+  color: var(--color-success);
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

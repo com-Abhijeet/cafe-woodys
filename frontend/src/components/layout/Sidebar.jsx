@@ -137,16 +137,14 @@ export function Sidebar({ activeTab, onSelectTab, role = 'ADMIN', isCollapsed, o
           />
         )}
 
-        {/* 9. Reports (Future Placeholder) */}
+        {/* 9. Reports & Analytics Dashboard */}
         {isVisible('REPORTS') && (
           <SidebarItem
             icon={BarChart3}
-            label="Reports"
+            label="Reports & Analytics"
             isActive={activeTab === 'REPORTS'}
-            onClick={() => {}}
+            onClick={() => onSelectTab('REPORTS')}
             isCollapsed={isCollapsed}
-            badge="SOON"
-            isDisabled={true}
           />
         )}
 

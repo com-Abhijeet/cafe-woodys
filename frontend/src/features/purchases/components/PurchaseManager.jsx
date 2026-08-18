@@ -2,13 +2,14 @@ import { useState, useCallback, useEffect } from 'react';
 import { usePurchases } from '../hooks/usePurchases';
 import { useSuppliers } from '../hooks/useSuppliers';
 import { useInventory } from '../../inventory/hooks/useInventory';
+import { exportFileApi } from '../../../lib/apiClient';
 import { FilterBar } from '../../../components/ui/FilterBar';
 import { EntityCard } from '../../../components/ui/EntityCard';
 import { ListRow } from '../../../components/ui/ListRow';
 import { PurchaseOrderDetailModal } from './PurchaseOrderDetailModal';
 import { Input } from '../../../components/ui/Input/Input';
 import { Button } from '../../../components/ui/Button/Button';
-import { Truck, ShoppingCart, Plus, CreditCard, Trash2, Building2 } from 'lucide-react';
+import { Truck, ShoppingCart, Plus, CreditCard, Trash2, Building2, Download, Calendar } from 'lucide-react';
 import styles from './PurchaseManager.module.css';
 
 export function PurchaseManager() {
@@ -32,6 +33,8 @@ export function PurchaseManager() {
   const [poSearch, setPoSearch] = useState('');
   const [poStatus, setPoStatus] = useState('ALL');
   const [poSort, setPoSort] = useState('createdAt_desc');
+  const [poDateFrom, setPoDateFrom] = useState('');
+  const [poDateTo, setPoDateTo] = useState('');
 
   const [paySearch, setPaySearch] = useState('');
   const [payMethod, setPayMethod] = useState('ALL');
@@ -58,9 +61,9 @@ export function PurchaseManager() {
 
   useEffect(() => {
     if (activeTab === 'PURCHASES') {
-      refreshPurchaseOrders({ search: poSearch, paymentStatus: poStatus, sort: poSort });
+      refreshPurchaseOrders({ search: poSearch, paymentStatus: poStatus, sort: poSort, dateFrom: poDateFrom, dateTo: poDateTo });
     }
-  }, [activeTab, refreshPurchaseOrders, poSearch, poStatus, poSort]);
+  }, [activeTab, refreshPurchaseOrders, poSearch, poStatus, poSort, poDateFrom, poDateTo]);
 
   useEffect(() => {
     if (activeTab === 'PAYMENTS') {
@@ -70,6 +73,23 @@ export function PurchaseManager() {
 
   const totalExpensePaise = purchaseOrders.reduce((sum, o) => sum + o.totalCost, 0);
   const totalUnpaidPaise = purchaseOrders.reduce((sum, o) => sum + (o.remainingBalance || 0), 0);
+
+  const handleExportPurchasesCsv = async () => {
+    try {
+      const query = new URLSearchParams();
+      if (poDateFrom) query.append('dateFrom', poDateFrom);
+      if (poDateTo) query.append('dateTo', poDateTo);
+
+      const filename = `purchases_export_${poDateFrom || 'all'}_to_${poDateTo || 'today'}.csv`;
+      await exportFileApi(`/purchase-orders/export?${query.toString()}`, filename);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleFetchFilteredPO = () => {
+    refreshPurchaseOrders({ search: poSearch, paymentStatus: poStatus, sort: poSort, dateFrom: poDateFrom, dateTo: poDateTo });
+  };
 
   // PO Line Handlers
   const handleAddLine = () => {
@@ -189,18 +209,25 @@ export function PurchaseManager() {
       <div className={styles.header}>
         <div>
           <h2 className={styles.title}>Purchases & Supplier Payments</h2>
-          <p className={styles.subtitle}>Manage stock-in purchase orders, supplier directory, and outgoing payments</p>
+          <p className={styles.subtitle}>Manage stock-in purchase orders, supplier directory, and export procurement reports</p>
         </div>
 
-        {activeTab === 'PURCHASES' ? (
-          <Button onClick={() => { setActionError(''); setShowPOModal(true); }}>
-            <Plus size={16} /> New Stock Purchase
-          </Button>
-        ) : activeTab === 'SUPPLIERS' ? (
-          <Button onClick={() => { setActionError(''); setShowSupplierModal(true); }}>
-            <Plus size={16} /> Add Supplier
-          </Button>
-        ) : null}
+        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+          {activeTab === 'PURCHASES' && (
+            <Button variant="secondary" onClick={handleExportPurchasesCsv}>
+              <Download size={16} /> Export Purchases CSV
+            </Button>
+          )}
+          {activeTab === 'PURCHASES' ? (
+            <Button onClick={() => { setActionError(''); setShowPOModal(true); }}>
+              <Plus size={16} /> New Stock Purchase
+            </Button>
+          ) : activeTab === 'SUPPLIERS' ? (
+            <Button onClick={() => { setActionError(''); setShowSupplierModal(true); }}>
+              <Plus size={16} /> Add Supplier
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {/* 3 Nav Sub-Tabs */}
@@ -245,6 +272,35 @@ export function PurchaseManager() {
               </span>
               <span className={styles.statLabel}>Pending Supplier Balance</span>
             </div>
+          </div>
+
+          {/* Date Range Bar */}
+          <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center', backgroundColor: 'var(--color-surface)', padding: 'var(--space-3) var(--space-4)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
+            <Calendar size={18} color="var(--color-brand)" />
+            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-text-secondary)' }}>Filter Date Range:</span>
+            <Input
+              type="date"
+              value={poDateFrom}
+              onChange={(e) => setPoDateFrom(e.target.value)}
+              placeholder="From Date"
+              style={{ fontSize: 'var(--text-xs)', padding: '6px 10px' }}
+            />
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>to</span>
+            <Input
+              type="date"
+              value={poDateTo}
+              onChange={(e) => setPoDateTo(e.target.value)}
+              placeholder="To Date"
+              style={{ fontSize: 'var(--text-xs)', padding: '6px 10px' }}
+            />
+            {(poDateFrom || poDateTo) && (
+              <button
+                onClick={() => { setPoDateFrom(''); setPoDateTo(''); }}
+                style={{ background: 'none', border: 'none', color: 'var(--color-danger)', fontSize: 'var(--text-xs)', fontWeight: 700, cursor: 'pointer' }}
+              >
+                Clear Dates
+              </button>
+            )}
           </div>
 
           <FilterBar

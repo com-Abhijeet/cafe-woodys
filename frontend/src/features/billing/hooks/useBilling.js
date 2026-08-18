@@ -3,6 +3,7 @@ import {
   generateBillApi,
   addPaymentApi,
   updateBillCustomerApi,
+  voidBillApi,
   fetchBillApi,
   listBillsApi
 } from '../api/billing.api';
@@ -58,6 +59,21 @@ export function useBilling() {
     }
   };
 
+  const voidBill = async (billId, reason) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const voided = await voidBillApi(billId, reason);
+      setCurrentBill(voided);
+      return voided;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const loadBill = async (billId) => {
     try {
       setIsLoading(true);
@@ -93,6 +109,7 @@ export function useBilling() {
     createBill,
     submitPayment,
     attachCustomerToBill,
+    voidBill,
     loadBill,
     loadBillsList
   };

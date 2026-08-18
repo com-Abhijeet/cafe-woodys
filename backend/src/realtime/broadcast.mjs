@@ -13,6 +13,10 @@ export function broadcastKitchenStatusUpdated(order) {
   broadcastMessage(WS_EVENTS.ORDER_KITCHEN_STATUS_UPDATED, { order });
 }
 
+export function broadcastOrderBoardCleared(data) {
+  broadcastMessage(WS_EVENTS.ORDER_BOARD_CLEARED, data);
+}
+
 export function broadcastGamingSessionUpdate(session) {
   broadcastMessage(WS_EVENTS.GAMING_SESSION_UPDATED, { session });
 }

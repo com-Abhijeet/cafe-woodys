@@ -6,27 +6,52 @@ function padLeft(str, len) {
   return (' '.repeat(len) + str).slice(-len);
 }
 
+function centerText(str, width) {
+  if (!str) return '';
+  if (str.length >= width) return str.slice(0, width);
+  const leftPadding = Math.floor((width - str.length) / 2);
+  return ' '.repeat(leftPadding) + str;
+}
+
 export function formatReceiptText(bill, options = {}) {
-  const width = options.width || 32; // 32 chars for 58mm, 48 chars for 80mm
+  const width = options.width || 32; // 32 chars for 58mm thermal, 48 chars for 80mm
   const divider = '-'.repeat(width);
   const doubleDivider = '='.repeat(width);
+  const profile = options.businessProfile || bill.businessProfile || {};
 
   const lines = [];
 
-  // Header
+  // Header: Business Profile
   lines.push(doubleDivider);
-  lines.push(padLeft('CAFÉ WOODY\'S', Math.floor((width + 'CAFÉ WOODY\'S'.length) / 2)));
-  lines.push(padLeft('POS & Gaming Zone', Math.floor((width + 'POS & Gaming Zone'.length) / 2)));
+  const bName = (profile.businessName || "CAFÉ WOODY'S").toUpperCase();
+  lines.push(centerText(bName, width));
+
+  if (profile.address) {
+    lines.push(centerText(profile.address, width));
+  }
+  if (profile.phone) {
+    lines.push(centerText(`Ph: ${profile.phone}`, width));
+  }
+  if (profile.gstin) {
+    lines.push(centerText(`GSTIN: ${profile.gstin}`, width));
+  }
+  if (profile.fssaiNumber) {
+    lines.push(centerText(`FSSAI: ${profile.fssaiNumber}`, width));
+  }
   lines.push(doubleDivider);
 
-  // Metadata
-  const billNo = bill.id ? bill.id.slice(-8).toUpperCase() : 'N/A';
+  // Invoice & Metadata
+  const invoiceNo = typeof bill.invoiceNumber === 'number'
+    ? `Invoice #${bill.invoiceNumber} (${bill.financialYear || ''})`
+    : (bill.invoiceNumber || `Bill #${bill.id.slice(-6).toUpperCase()}`);
   const dateStr = bill.createdAt ? new Date(bill.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : new Date().toLocaleString();
-  
-  lines.push(`Receipt #: ${billNo}`);
+
+  lines.push(`Invoice  : ${invoiceNo}`);
   lines.push(`Date     : ${dateStr}`);
   lines.push(`Table    : ${bill.table?.name || 'N/A'}`);
-  lines.push(`Staff    : ${bill.staff?.username || 'Staff'}`);
+  if (bill.staff?.username) {
+    lines.push(`Staff    : ${bill.staff.username}`);
+  }
   if (bill.customer?.name) {
     lines.push(`Customer : ${bill.customer.name} (${bill.customer.phone || ''})`);
   }
@@ -71,17 +96,25 @@ export function formatReceiptText(bill, options = {}) {
     }
   }
 
-  // Totals Section
+  // Subtotal & Tax Breakdown Section
   lines.push(divider);
-  lines.push(padRight('Food Subtotal:', width - 10) + padLeft(`₹${(bill.foodTotal / 100).toFixed(2)}`, 10));
-  lines.push(padRight('Gaming Subtotal:', width - 10) + padLeft(`₹${(bill.gamingTotal / 100).toFixed(2)}`, 10));
-  
-  if (bill.taxAmount > 0) {
-    lines.push(padRight('Tax:', width - 10) + padLeft(`₹${(bill.taxAmount / 100).toFixed(2)}`, 10));
-  }
+  const foodTotalPaise = bill.foodTotal || 0;
+  const gamingTotalPaise = bill.gamingTotal || 0;
+  const subtotalPaise = foodTotalPaise + gamingTotalPaise;
+
+  lines.push(padRight('Subtotal:', width - 10) + padLeft(`₹${(subtotalPaise / 100).toFixed(2)}`, 10));
+
   if (bill.discountAmount > 0) {
-    lines.push(padRight('Discount:', width - 10) + padLeft(`-₹${(bill.discountAmount / 100).toFixed(2)}`, 10));
+    const reasonLabel = bill.discountReason ? ` (${bill.discountReason})` : '';
+    const discountStr = `-₹${(bill.discountAmount / 100).toFixed(2)}`;
+    lines.push(padRight(`Discount${reasonLabel}:`, width - 10) + padLeft(discountStr, 10));
   }
+
+  const cgst = bill.cgstAmount || 0;
+  const sgst = bill.sgstAmount || 0;
+
+  lines.push(padRight('CGST:', width - 10) + padLeft(`₹${(cgst / 100).toFixed(2)}`, 10));
+  lines.push(padRight('SGST:', width - 10) + padLeft(`₹${(sgst / 100).toFixed(2)}`, 10));
 
   lines.push(divider);
   lines.push(padRight('GRAND TOTAL:', width - 10) + padLeft(`₹${(bill.grandTotal / 100).toFixed(2)}`, 10));
@@ -89,7 +122,7 @@ export function formatReceiptText(bill, options = {}) {
 
   // Payments History
   if (bill.payments?.length > 0) {
-    lines.push('PAYMENTS RECORDED:');
+    lines.push('PAID VIA:');
     for (const p of bill.payments) {
       const refStr = p.reference ? ` (${p.reference})` : '';
       const methodStr = `${p.method}${refStr}`;
@@ -100,9 +133,10 @@ export function formatReceiptText(bill, options = {}) {
     lines.push(divider);
   }
 
-  // Footer
-  lines.push(padLeft('Thank you for visiting!', Math.floor((width + 'Thank you for visiting!'.length) / 2)));
-  lines.push(padLeft('Please Come Again', Math.floor((width + 'Please Come Again'.length) / 2)));
+  // Footer Note
+  const footerNote = profile.receiptFooterNote || 'Thank you for visiting Café Woody\'s!';
+  lines.push(centerText(footerNote, width));
+  lines.push(centerText('Please Come Again', width));
   lines.push(doubleDivider);
 
   return lines.join('\n');

@@ -14,6 +14,10 @@ import purchaseRoutes from './modules/purchase/purchase.routes.mjs';
 import smsRoutes from './modules/sms/sms.routes.mjs';
 import customerRoutes from './modules/customer/customer.routes.mjs';
 import paymentRoutes from './modules/payment/payment.routes.mjs';
+import businessProfileRoutes from './modules/business-profile/business-profile.routes.mjs';
+import discountRuleRoutes from './modules/discount-rule/discount-rule.routes.mjs';
+import exportRoutes from './modules/export/export.routes.mjs';
+import reportsRoutes from './modules/reports/reports.routes.mjs';
 import { errorHandler } from './shared/middleware/error-handler.mjs';
 
 const app = express();
@@ -35,12 +39,16 @@ app.use('/api/menu-items', menuItemRoutes);
 app.use('/api/inventory-items', inventoryRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/customers', customerRoutes);
+app.use('/api', exportRoutes); // Mounted before billingRoutes so /bills/export takes precedence over /bills/:id
 app.use('/api', purchaseRoutes);
 app.use('/api', orderRoutes);
 app.use('/api', paymentRoutes);
 app.use('/api', recipeRoutes);
 app.use('/api', smsRoutes);
 app.use('/api', billingRoutes);
+app.use('/api', businessProfileRoutes);
+app.use('/api', discountRuleRoutes);
+app.use('/api', reportsRoutes);
 
 // Centralized error handling
 app.use(errorHandler);

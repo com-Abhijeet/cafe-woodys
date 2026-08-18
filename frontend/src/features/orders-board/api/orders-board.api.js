@@ -22,3 +22,10 @@ export async function cancelOrderApi(orderId) {
     method: 'PATCH'
   });
 }
+
+export async function closeDayApi(force = false) {
+  return apiClient('/orders/close-day', {
+    method: 'POST',
+    body: { force }
+  });
+}

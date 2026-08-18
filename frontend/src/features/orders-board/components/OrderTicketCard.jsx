@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
 import { EntityCard } from '../../../components/ui/EntityCard';
+import { formatKitchenStatus } from '../../../lib/labels';
 import { Clock, ChevronDown, ChevronUp, Play, CheckCircle2, BellRing, AlertTriangle, Undo2 } from 'lucide-react';
 import styles from './OrderTicketCard.module.css';
 
@@ -71,7 +72,7 @@ export function OrderTicketCard({ order, onAdvanceStatus, onCancelOrder }) {
           onClick={handleAction}
           disabled={isSubmitting}
         >
-          <Play size={14} /> {isSubmitting ? 'Updating...' : 'Start Preparing'}
+          <Play size={14} /> {isSubmitting ? 'Updating...' : 'Start Cooking'}
         </button>
       );
     } else if (status === 'PREPARING') {
@@ -117,7 +118,7 @@ export function OrderTicketCard({ order, onAdvanceStatus, onCancelOrder }) {
     <EntityCard
       title={`${order.table?.name || 'Table'} Ticket`}
       subtitle={`Staff: ${order.staff?.username || 'Staff'} • ${order.customer ? order.customer.name : 'Walk-in'}`}
-      badgeText={isDelayed ? '⚠️ DELAYED (>10m)' : status}
+      badgeText={isDelayed ? '⚠️ DELAYED (>10m)' : formatKitchenStatus(status)}
       badgeVariant={getBadgeVariant(status)}
       onClick={() => setIsExpanded(!isExpanded)}
       footerLeft={

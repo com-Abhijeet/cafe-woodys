@@ -33,8 +33,11 @@ export const orderRepository = {
     });
   },
 
-  async findAllOrders({ kitchenStatus, tableId, status, sort = 'createdAt_desc' } = {}) {
+  async findAllOrders({ kitchenStatus, tableId, status, sort = 'createdAt_desc', includeCleared = false } = {}) {
     const where = {};
+    if (!includeCleared) {
+      where.boardClearedAt = null;
+    }
     if (tableId) where.tableId = tableId;
 
     // By default, exclude CANCELLED orders unless explicitly requested
@@ -61,6 +64,32 @@ export const orderRepository = {
       },
       orderBy
     });
+  },
+
+  async findUnresolvedBoardOrders() {
+    return prisma.order.findMany({
+      where: {
+        boardClearedAt: null,
+        OR: [
+          { status: 'OPEN' },
+          { kitchenStatus: { not: 'SERVED' } }
+        ]
+      },
+      include: {
+        table: { select: { id: true, name: true } },
+        items: { select: { id: true, quantity: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+  },
+
+  async clearBoardOrders() {
+    const now = new Date();
+    const result = await prisma.order.updateMany({
+      where: { boardClearedAt: null },
+      data: { boardClearedAt: now }
+    });
+    return { clearedCount: result.count, timestamp: now };
   },
 
   async updateKitchenStatus(id, kitchenStatus) {
@@ -155,7 +184,8 @@ export const orderRepository = {
             create: items.map((item) => ({
               menuItemId: item.menuItemId,
               quantity: item.quantity,
-              priceSnapshot: item.priceSnapshot
+              priceSnapshot: item.priceSnapshot,
+              gstPercentSnapshot: item.gstPercentSnapshot
             }))
           }
         },

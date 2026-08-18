@@ -1,7 +1,18 @@
 import { formatReceiptText } from './receiptFormatter';
+import { fetchBusinessProfileApi } from '../features/settings/api/businessProfile.api';
 
-export function printBillViaRawBT(bill, options = {}) {
-  const formattedText = formatReceiptText(bill, options);
+export async function printBillViaRawBT(bill, options = {}) {
+  let profile = options.businessProfile;
+
+  if (!profile) {
+    try {
+      profile = await fetchBusinessProfileApi();
+    } catch (err) {
+      console.warn('Could not fetch business profile for receipt print:', err);
+    }
+  }
+
+  const formattedText = formatReceiptText(bill, { ...options, businessProfile: profile });
 
   // Construct RawBT URL scheme
   // Format: rawbt:data:text/plain;charset=utf-8,ENCODED_TEXT

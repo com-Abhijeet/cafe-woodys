@@ -20,6 +20,7 @@ export function MenuManager() {
   const [name, setName] = useState('');
   const [category, setCategory] = useState('Beverages');
   const [priceRs, setPriceRs] = useState('');
+  const [gstPercent, setGstPercent] = useState('');
   const [description, setDescription] = useState('');
   const [isAvailable, setIsAvailable] = useState(true);
   const [selectedFile, setSelectedFile] = useState(null);
@@ -36,6 +37,7 @@ export function MenuManager() {
     setName('');
     setCategory('Beverages');
     setPriceRs('');
+    setGstPercent('');
     setDescription('');
     setIsAvailable(true);
     setSelectedFile(null);
@@ -48,6 +50,7 @@ export function MenuManager() {
     setName(item.name);
     setCategory(item.category);
     setPriceRs((item.price / 100).toString());
+    setGstPercent(item.gstPercent != null ? item.gstPercent.toString() : '');
     setDescription(item.description || '');
     setIsAvailable(item.isAvailable);
     setSelectedFile(null);
@@ -65,6 +68,7 @@ export function MenuManager() {
       name,
       category,
       price: pricePaise,
+      gstPercent: gstPercent !== '' ? parseFloat(gstPercent) : null,
       description,
       isAvailable
     };
@@ -112,7 +116,7 @@ export function MenuManager() {
       <div className={styles.header}>
         <div>
           <h2 className={styles.title}>Menu Management</h2>
-          <p className={styles.subtitle}>Manage café food & drink offerings, photos, and raw material recipes</p>
+          <p className={styles.subtitle}>Manage café food & drink offerings, custom GST rates, photos, and raw material recipes</p>
         </div>
         <Button onClick={openAddModal}>
           <Plus size={16} /> Add Menu Item
@@ -166,8 +170,11 @@ export function MenuManager() {
                     <span className={styles.itemName}>{item.name}</span>
                     <span className={styles.itemPrice}>₹{(item.price / 100).toFixed(2)}</span>
                   </div>
-                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-brand)', fontWeight: 600, marginTop: '2px' }}>
-                    {item.category}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 'var(--text-xs)', marginTop: '2px' }}>
+                    <span style={{ color: 'var(--color-brand)', fontWeight: 600 }}>{item.category}</span>
+                    <span style={{ color: 'var(--color-text-secondary)', fontWeight: 700, backgroundColor: 'var(--color-bg)', padding: '1px 6px', borderRadius: '4px' }}>
+                      GST: {item.gstPercent != null ? `${item.gstPercent}%` : 'Default'}
+                    </span>
                   </div>
                   {item.description && <p className={styles.itemDesc}>{item.description}</p>}
                 </div>
@@ -211,7 +218,12 @@ export function MenuManager() {
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
               <Input label="Item Name" value={name} onChange={(e) => setName(e.target.value)} required placeholder="e.g. Iced Cold Coffee" />
               <Input label="Category" value={category} onChange={(e) => setCategory(e.target.value)} required placeholder="e.g. Beverages, Snacks, Burgers" />
-              <Input label="Price (₹)" type="number" step="0.5" value={priceRs} onChange={(e) => setPriceRs(e.target.value)} required placeholder="e.g. 120" />
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
+                <Input label="Price (₹)" type="number" step="0.5" value={priceRs} onChange={(e) => setPriceRs(e.target.value)} required placeholder="e.g. 120" />
+                <Input label="GST Rate % (leave empty for default)" type="number" step="0.5" value={gstPercent} onChange={(e) => setGstPercent(e.target.value)} placeholder="e.g. 5, 12, 18" />
+              </div>
+
               <Input label="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Short item description" />
 
               {/* Photo Upload Field */}

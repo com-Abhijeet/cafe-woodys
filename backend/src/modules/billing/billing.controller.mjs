@@ -18,6 +18,16 @@ export const billingController = {
     }
   },
 
+  async previewDiscount(req, res, next) {
+    try {
+      const { tableId } = req.params;
+      const result = await billingService.previewDiscount(tableId);
+      return res.json({ data: result });
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async addPayment(req, res, next) {
     try {
       const { billId } = req.params;
@@ -57,6 +67,18 @@ export const billingController = {
       const { customerId } = req.body;
       const updated = await billingService.updateBillCustomer(req.params.id, customerId);
       return res.json({ data: updated });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async voidBill(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body || {};
+      const staffId = req.user.id;
+      const voided = await billingService.voidBill(id, staffId, { reason });
+      return res.json({ data: voided });
     } catch (err) {
       next(err);
     }

@@ -1,82 +1,44 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { getDefaultTabForRole } from '../../config/sidebarConfig';
 import { AppShell } from './AppShell';
+
+// Eagerly loaded core views for instantaneous floor grid & live order board loads
 import { TableGrid } from '../../features/tables/components/TableGrid';
 import { OrdersBoard } from '../../features/orders-board/components/OrdersBoard';
-import { ZoneTableManager } from '../../features/zones/components/ZoneTableManager';
-import { MenuManager } from '../../features/menu/components/MenuManager';
-import { InventoryManager } from '../../features/inventory/components/InventoryManager';
-import { PurchaseManager } from '../../features/purchases/components/PurchaseManager';
-import { CustomerCRMManager } from '../../features/customers/components/CustomerCRMManager';
-import { PaymentsManager } from '../../features/payments/components/PaymentsManager';
-import { BillsHistoryManager } from '../../features/billing/components/BillsHistoryManager';
-import { StaffManager } from '../../features/auth/components/StaffManager';
-import { Settings, Users } from 'lucide-react';
+
+// Lazy-loaded heavy modules — code split into separate dynamic bundle chunks
+const MenuManager = lazy(() => import('../../features/menu/components/MenuManager').then(m => ({ default: m.MenuManager })));
+const InventoryManager = lazy(() => import('../../features/inventory/components/InventoryManager').then(m => ({ default: m.InventoryManager })));
+const PurchaseManager = lazy(() => import('../../features/purchases/components/PurchaseManager').then(m => ({ default: m.PurchaseManager })));
+const CustomerCRMManager = lazy(() => import('../../features/customers/components/CustomerCRMManager').then(m => ({ default: m.CustomerCRMManager })));
+const PaymentsManager = lazy(() => import('../../features/payments/components/PaymentsManager').then(m => ({ default: m.PaymentsManager })));
+const BillsHistoryManager = lazy(() => import('../../features/billing/components/BillsHistoryManager').then(m => ({ default: m.BillsHistoryManager })));
+const SettingsManager = lazy(() => import('../../features/settings/components/SettingsManager').then(m => ({ default: m.SettingsManager })));
+const ReportsDashboard = lazy(() => import('../../features/reports/components/ReportsDashboard').then(m => ({ default: m.ReportsDashboard })));
 
 export function MainLayout() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState(() => getDefaultTabForRole(user?.role));
-  const [settingsSubTab, setSettingsSubTab] = useState('ZONES'); // 'ZONES' | 'STAFF'
 
   return (
     <AppShell activeTab={activeTab} onSelectTab={setActiveTab}>
-      {activeTab === 'FLOOR' && <TableGrid />}
-      {activeTab === 'ORDERS_BOARD' && <OrdersBoard />}
-      {activeTab === 'MENU' && <MenuManager />}
-      {activeTab === 'INVENTORY' && <InventoryManager />}
-      {activeTab === 'PURCHASES' && <PurchaseManager />}
-      {activeTab === 'CUSTOMERS' && <CustomerCRMManager />}
-      {activeTab === 'PAYMENTS' && <PaymentsManager />}
-      {activeTab === 'BILLS' && <BillsHistoryManager />}
-      
-      {/* Settings View (Zones/Tables Config & Staff Management) */}
-      {activeTab === 'SETTINGS' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-          <div style={{ display: 'flex', gap: 'var(--space-2)', borderBottom: '1px solid var(--color-border)', paddingBottom: 'var(--space-3)' }}>
-            <button
-              onClick={() => setSettingsSubTab('ZONES')}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: 'var(--space-2) var(--space-4)',
-                borderRadius: 'var(--radius-md)',
-                border: 'none',
-                backgroundColor: settingsSubTab === 'ZONES' ? 'rgba(107, 63, 42, 0.12)' : 'transparent',
-                color: settingsSubTab === 'ZONES' ? 'var(--color-brand)' : 'var(--color-text-secondary)',
-                fontWeight: 700,
-                fontSize: 'var(--text-sm)',
-                cursor: 'pointer'
-              }}
-            >
-              <Settings size={16} /> Zones & Tables Configuration
-            </button>
-
-            <button
-              onClick={() => setSettingsSubTab('STAFF')}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: 'var(--space-2) var(--space-4)',
-                borderRadius: 'var(--radius-md)',
-                border: 'none',
-                backgroundColor: settingsSubTab === 'STAFF' ? 'rgba(107, 63, 42, 0.12)' : 'transparent',
-                color: settingsSubTab === 'STAFF' ? 'var(--color-brand)' : 'var(--color-text-secondary)',
-                fontWeight: 700,
-                fontSize: 'var(--text-sm)',
-                cursor: 'pointer'
-              }}
-            >
-              <Users size={16} /> Staff & User Accounts
-            </button>
-          </div>
-
-          {settingsSubTab === 'ZONES' && <ZoneTableManager />}
-          {settingsSubTab === 'STAFF' && <StaffManager />}
+      <Suspense fallback={
+        <div style={{ padding: '40px', textAlign: 'center', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
+          Loading view chunk...
         </div>
-      )}
+      }>
+        {activeTab === 'FLOOR' && <TableGrid />}
+        {activeTab === 'ORDERS_BOARD' && <OrdersBoard />}
+        {activeTab === 'MENU' && <MenuManager />}
+        {activeTab === 'INVENTORY' && <InventoryManager />}
+        {activeTab === 'PURCHASES' && <PurchaseManager />}
+        {activeTab === 'CUSTOMERS' && <CustomerCRMManager />}
+        {activeTab === 'PAYMENTS' && <PaymentsManager />}
+        {activeTab === 'BILLS' && <BillsHistoryManager />}
+        {activeTab === 'REPORTS' && <ReportsDashboard />}
+        {activeTab === 'SETTINGS' && <SettingsManager />}
+      </Suspense>
     </AppShell>
   );
 }

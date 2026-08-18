@@ -58,6 +58,37 @@ export const tableService = {
       throw new NotFoundError('Table not found', 'TABLE_NOT_FOUND');
     }
 
+    const activeSessionsCount = existing.gamingSessions?.length || 0;
+    const openOrdersCount = existing.orders?.length || 0;
+
+    // Protection 1: Rejects setting table status to FREE if active sessions or open orders exist
+    if (data.status === 'FREE') {
+      if (activeSessionsCount > 0 || openOrdersCount > 0) {
+        const activeText = [];
+        if (activeSessionsCount > 0) activeText.push(`${activeSessionsCount} active gaming session(s)`);
+        if (openOrdersCount > 0) activeText.push(`${openOrdersCount} unbilled open order(s)`);
+        throw new ConflictError(
+          `Cannot set table '${existing.name}' status to FREE while it has ${activeText.join(' and ')}. Please generate the bill first.`,
+          'TABLE_HAS_ACTIVE_UNBILLED_ACTIVITY'
+        );
+      }
+    }
+
+    // Protection 2: Rejects editing rates or zone configuration while table has active sessions or open orders
+    const isEditingConfig = (
+      (data.zoneId && data.zoneId !== existing.zoneId) ||
+      data.halfHourRate !== undefined ||
+      data.hourlyRate !== undefined ||
+      data.maxPlayers !== undefined
+    );
+
+    if (isEditingConfig && (activeSessionsCount > 0 || openOrdersCount > 0)) {
+      throw new ConflictError(
+        `Cannot edit rates or zone configuration for table '${existing.name}' while it has active sessions or unbilled orders. Please settle the table first.`,
+        'TABLE_OCCUPIED_CONFIG_LOCKED'
+      );
+    }
+
     const cleanData = { ...data };
     const targetZoneId = cleanData.zoneId || existing.zoneId;
     const zone = await zoneRepository.findById(targetZoneId);

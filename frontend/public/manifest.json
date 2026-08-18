@@ -1,0 +1,17 @@
+{
+  "name": "Cafe Woody's POS & Gaming",
+  "short_name": "Woody's POS",
+  "description": "Tablet-first Café & Gaming Zone Management System",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAF6F1",
+  "theme_color": "#6B3F2A",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

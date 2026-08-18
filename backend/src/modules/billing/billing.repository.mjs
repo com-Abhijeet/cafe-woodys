@@ -38,12 +38,17 @@ export const billingRepository = {
     }
 
     if (search) {
+      const searchNum = parseInt(search, 10);
       where.OR = [
         { id: { contains: search, mode: 'insensitive' } },
+        { financialYear: { contains: search, mode: 'insensitive' } },
         { customer: { name: { contains: search, mode: 'insensitive' } } },
         { customer: { phone: { contains: search, mode: 'insensitive' } } },
         { table: { name: { contains: search, mode: 'insensitive' } } }
       ];
+      if (!isNaN(searchNum)) {
+        where.OR.push({ invoiceNumber: searchNum });
+      }
     }
 
     let orderBy = { createdAt: 'desc' };

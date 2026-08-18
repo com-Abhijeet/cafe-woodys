@@ -1,9 +1,16 @@
+import { useState } from 'react';
 import { useOrdersBoard } from '../hooks/useOrdersBoard';
+import { useAuth } from '../../../hooks/useAuth';
 import { OrderTicketCard } from './OrderTicketCard';
-import { ChefHat, RefreshCw, Volume2, VolumeX, Bell } from 'lucide-react';
+import { Button } from '../../../components/ui/Button/Button';
+import { KITCHEN_STATUS_COLUMN_TITLES, formatKitchenStatus } from '../../../lib/labels';
+import { ChefHat, RefreshCw, Volume2, VolumeX, Bell, Sunset, AlertTriangle } from 'lucide-react';
 import styles from './OrdersBoard.module.css';
 
 export function OrdersBoard() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
+
   const {
     orders,
     isLoading,
@@ -13,8 +20,14 @@ export function OrdersBoard() {
     toastMessage,
     refreshOrders,
     advanceKitchenStatus,
-    cancelOrder
+    cancelOrder,
+    closeDay
   } = useOrdersBoard();
+
+  // Close Day Confirmation & Warning State
+  const [unresolvedData, setUnresolvedData] = useState(null);
+  const [isClosingDay, setIsClosingDay] = useState(false);
+  const [closeSuccessToast, setCloseSuccessToast] = useState(null);
 
   const pendingOrders = orders.filter((o) => (o.kitchenStatus || 'PENDING') === 'PENDING');
   const preparingOrders = orders.filter((o) => o.kitchenStatus === 'PREPARING');
@@ -22,16 +35,48 @@ export function OrdersBoard() {
   const servedOrders = orders.filter((o) => o.kitchenStatus === 'SERVED');
 
   const columns = [
-    { title: 'Pending Prep', status: 'PENDING', orders: pendingOrders, headerClass: styles.headerPending },
-    { title: 'Currently Cooking', status: 'PREPARING', orders: preparingOrders, headerClass: styles.headerPreparing },
-    { title: 'Ready for Service', status: 'READY', orders: readyOrders, headerClass: styles.headerReady },
-    { title: 'Served to Table', status: 'SERVED', orders: servedOrders, headerClass: styles.headerServed }
+    { title: KITCHEN_STATUS_COLUMN_TITLES.PENDING, status: 'PENDING', orders: pendingOrders, headerClass: styles.headerPending },
+    { title: KITCHEN_STATUS_COLUMN_TITLES.PREPARING, status: 'PREPARING', orders: preparingOrders, headerClass: styles.headerPreparing },
+    { title: KITCHEN_STATUS_COLUMN_TITLES.READY, status: 'READY', orders: readyOrders, headerClass: styles.headerReady },
+    { title: KITCHEN_STATUS_COLUMN_TITLES.SERVED, status: 'SERVED', orders: servedOrders, headerClass: styles.headerServed }
   ];
+
+  const handleInitiateCloseDay = async () => {
+    setIsClosingDay(true);
+    setUnresolvedData(null);
+    try {
+      const res = await closeDay(false);
+      if (!res.canClose) {
+        setUnresolvedData(res);
+      } else {
+        setCloseSuccessToast(`Close Day Complete! ${res.clearedOrdersCount} orders cleared.`);
+        setTimeout(() => setCloseSuccessToast(null), 5000);
+      }
+    } catch (err) {
+      alert(`Close Day failed: ${err.message}`);
+    } finally {
+      setIsClosingDay(false);
+    }
+  };
+
+  const handleConfirmForceCloseDay = async () => {
+    setIsClosingDay(true);
+    try {
+      const res = await closeDay(true);
+      setUnresolvedData(null);
+      setCloseSuccessToast(`Close Day Completed! Cleared ${res.clearedOrdersCount} orders off board.`);
+      setTimeout(() => setCloseSuccessToast(null), 5000);
+    } catch (err) {
+      alert(`Force Close Day failed: ${err.message}`);
+    } finally {
+      setIsClosingDay(false);
+    }
+  };
 
   return (
     <div className={styles.container}>
       {/* Toast Alert Banner */}
-      {toastMessage && (
+      {(toastMessage || closeSuccessToast) && (
         <div style={{
           backgroundColor: 'var(--color-brand)',
           color: '#ffffff',
@@ -45,7 +90,7 @@ export function OrdersBoard() {
           boxShadow: 'var(--shadow-card)',
           animation: 'slideDown 0.3s ease'
         }}>
-          <Bell size={18} /> {toastMessage}
+          <Bell size={18} /> {closeSuccessToast || toastMessage}
         </div>
       )}
 
@@ -53,12 +98,25 @@ export function OrdersBoard() {
       <div className={styles.header}>
         <div>
           <h2 className={styles.title} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <ChefHat size={22} color="var(--color-brand)" /> Kitchen & Live Orders Kanban Board
+            <ChefHat size={22} color="var(--color-brand)" /> Live Orders Tracker
           </h2>
           <p className={styles.subtitle}>Shared real-time order prep tracking across all café tables and stations</p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+          {/* Admin Close Day Button */}
+          {isAdmin && (
+            <Button
+              variant="danger"
+              onClick={handleInitiateCloseDay}
+              disabled={isClosingDay}
+              style={{ padding: '6px 12px', fontSize: 'var(--text-xs)' }}
+              title="End-of-day reset for live order board"
+            >
+              <Sunset size={16} /> {isClosingDay ? 'Closing...' : 'Close Day'}
+            </Button>
+          )}
+
           {/* Sound Mute/Unmute Toggle */}
           <button
             onClick={toggleSound}
@@ -104,7 +162,7 @@ export function OrdersBoard() {
 
       {/* 4-Column Kanban Grid */}
       {isLoading ? (
-        <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>Loading kitchen board...</p>
+        <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>Loading live orders...</p>
       ) : error ? (
         <p style={{ color: 'var(--color-danger)' }}>{error}</p>
       ) : (
@@ -132,6 +190,67 @@ export function OrdersBoard() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Close Day Safety Warning Modal */}
+      {unresolvedData && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1200
+        }}>
+          <div style={{
+            backgroundColor: 'var(--color-surface)',
+            border: '1px solid var(--color-danger)',
+            borderRadius: 'var(--radius-lg)',
+            padding: 'var(--space-4)',
+            maxWidth: '480px',
+            width: '90%',
+            boxShadow: 'var(--shadow-lg)'
+          }}>
+            <h3 style={{ margin: 0, color: 'var(--color-danger)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertTriangle size={22} /> Unresolved Orders Active ({unresolvedData.unresolvedOrdersCount})
+            </h3>
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', marginTop: '6px' }}>
+              Close Day cannot proceed normally because the following orders are still in progress or unbilled.
+            </p>
+
+            {/* Unresolved Orders Breakdown */}
+            <div style={{ margin: '12px 0', maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {unresolvedData.unresolvedOrders?.map((item) => (
+                <div key={item.orderId} style={{ backgroundColor: 'var(--color-bg)', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--color-border)', fontSize: 'var(--text-xs)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <strong style={{ color: 'var(--color-brand)' }}>{item.tableName}</strong> ({item.itemCount} items)
+                    <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>
+                      Placed {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ backgroundColor: 'rgba(196,57,43,0.15)', color: 'var(--color-danger)', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, fontSize: '10px' }}>
+                      {formatKitchenStatus(item.kitchenStatus)} ({item.status})
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
+              <Button variant="secondary" onClick={() => setUnresolvedData(null)}>
+                Handle Orders First
+              </Button>
+              <Button variant="danger" onClick={handleConfirmForceCloseDay} disabled={isClosingDay}>
+                {isClosingDay ? 'Clearing...' : 'Close Day Anyway'}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

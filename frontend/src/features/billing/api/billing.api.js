@@ -21,6 +21,13 @@ export async function updateBillCustomerApi(billId, customerId) {
   });
 }
 
+export async function voidBillApi(billId, reason) {
+  return apiClient(`/bills/${billId}/void`, {
+    method: 'POST',
+    body: { reason }
+  });
+}
+
 export async function fetchBillApi(id) {
   return apiClient(`/bills/${id}`);
 }

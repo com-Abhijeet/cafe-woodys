@@ -96,6 +96,18 @@ enum SmsStatus {
   FAILED
 }
 
+enum DiscountType {
+  PERCENTAGE
+  FLAT
+}
+
+enum DiscountScope {
+  ALL         // whole bill (food + gaming)
+  CAFE_ONLY   // food/drink total only
+  GAMING_ONLY // gaming charge only
+  ZONE        // a specific Zone, see DiscountRule.zoneId
+}
+
 // ─────────────────────────────────────────────
 // Staff & Auth
 // ─────────────────────────────────────────────
@@ -109,9 +121,10 @@ model Staff {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  orders Order[]
-  bills  Bill[]
+  orders         Order[]
+  bills          Bill[]
   inventoryAdjustments InventoryAdjustment[]
+  voidedBills    Bill[]   @relation("VoidedBills")
 }
 
 // ─────────────────────────────────────────────
@@ -125,10 +138,12 @@ model Zone {
   defaultHalfHourRate   Int?     // paise per player, 0-30 min slab — gaming zones only
   defaultHourlyRate     Int?     // paise per player, 31-60 min slab — gaming zones only
   defaultMaxPlayers     Int?     // seat capacity, gaming zones only
+  gstPercent            Decimal? // total GST % applied to this zone's gaming charge — null means fall back to BusinessProfile.defaultGstPercent. Gaming/amusement services are commonly taxed at a different rate from food in India — confirm the correct rate with the client's accountant, don't assume it matches the food rate.
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
   tables Table[]
+  discountRules DiscountRule[]
 }
 
 model Table {
@@ -169,6 +184,7 @@ model GamingSession {
   halfHourRateSnapshot Int                 // paise, 0-30 min slab rate — snapshotted at session start, never re-read live
   hourlyRateSnapshot   Int                 // paise, 31-60 min slab rate — snapshotted at session start, never re-read live
   maxChargeCap         Int?                // paise, optional per-player cap — snapshotted at session start
+  gstPercentSnapshot   Decimal             // Zone.gstPercent (or BusinessProfile.defaultGstPercent fallback) at session start — frozen, same reasoning as the rate snapshots above
   startTime            DateTime            @default(now())
   endTime              DateTime?
   status               GamingSessionStatus @default(ACTIVE)
@@ -188,6 +204,7 @@ model MenuItem {
   name        String
   description String?
   price       Int      // paise
+  gstPercent  Decimal? // total GST % for this item (e.g. 5, 12, 18) — null means fall back to BusinessProfile.defaultGstPercent. Set explicitly for anything that isn't standard-rated (packaged goods, exempt items).
   imageUrl    String?  // Cloudinary URL
   category    String
   isAvailable Boolean  @default(true)
@@ -327,42 +344,47 @@ model SmsLog {
 // ─────────────────────────────────────────────
 
 model Order {
-  id            String        @id @default(uuid())
-  tableId       String
-  table         Table         @relation(fields: [tableId], references: [id], onDelete: Restrict)
-  customerId    String?
-  customer      Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  staffId       String
-  staff         Staff         @relation(fields: [staffId], references: [id], onDelete: Restrict)
-  billId        String?
-  bill          Bill?         @relation(fields: [billId], references: [id], onDelete: SetNull)
-  status        OrderStatus   @default(OPEN)
-  kitchenStatus KitchenStatus @default(PENDING)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id             String        @id @default(uuid())
+  tableId        String
+  table          Table         @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  customerId     String?
+  customer       Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  staffId        String
+  staff          Staff         @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  billId         String?
+  bill           Bill?         @relation(fields: [billId], references: [id], onDelete: SetNull)
+  status         OrderStatus   @default(OPEN)
+  kitchenStatus  KitchenStatus @default(PENDING)
+  boardClearedAt DateTime?     // set by the end-of-day "Close Day" action — hides this order from the live order tracker without touching status/kitchenStatus, which stay as the real historical record
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   items OrderItem[]
 
   @@index([tableId])
   @@index([status])
   @@index([kitchenStatus])
+  @@index([boardClearedAt])
 }
 
 model OrderItem {
-  id             String   @id @default(uuid())
-  orderId        String
-  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  menuItemId     String
-  menuItem       MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
-  quantity       Int
-  priceSnapshot  Int      // paise, MenuItem.price at time of order — never re-read live price for historical orders
-  createdAt      DateTime @default(now())
+  id                 String   @id @default(uuid())
+  orderId            String
+  order              Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId         String
+  menuItem           MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
+  quantity           Int
+  priceSnapshot      Int      // paise, MenuItem.price at time of order — never re-read live price for historical orders
+  gstPercentSnapshot Decimal  // MenuItem.gstPercent (or BusinessProfile.defaultGstPercent fallback) at time of order — frozen, same reasoning as priceSnapshot
+  createdAt          DateTime @default(now())
 
   @@index([orderId])
 }
 
 model Bill {
   id              String        @id @default(uuid())
+  invoiceNumber   Int           // plain sequential 1, 2, 3... resets to 1 every financial year (see financialYear) — NOT globally unique alone, see @@unique below
+  financialYear   String        // e.g. "2025-26" — Indian financial year (1 Apr - 31 Mar), computed in billing.service.mjs at bill creation
   tableId         String
   table           Table         @relation(fields: [tableId], references: [id], onDelete: Restrict)
   customerId      String?
@@ -371,10 +393,16 @@ model Bill {
   staff           Staff         @relation(fields: [staffId], references: [id], onDelete: Restrict)
   foodTotal       Int           @default(0) // paise
   gamingTotal     Int           @default(0) // paise
-  taxAmount       Int           @default(0) // paise
-  discountAmount  Int           @default(0) // paise
+  cgstAmount      Int           @default(0) // paise — half of total GST, per BusinessProfile.cgstPercent
+  sgstAmount      Int           @default(0) // paise — half of total GST, per BusinessProfile.sgstPercent
+  discountAmount  Int           @default(0) // paise — manual entry or auto-applied from a matching DiscountRule at bill time
+  discountReason  String?       // e.g. "Happy Hour Gaming", "Manager discount" — always set when discountAmount > 0, never a bare number with no explanation
   grandTotal      Int           // paise
   paymentStatus   PaymentStatus @default(UNPAID) // recompute in payment.service.mjs whenever a Payment is added — UNPAID (0 paid), PARTIALLY_PAID (0 < paid < grandTotal), PAID (paid >= grandTotal)
+  voidedAt        DateTime?     // set when a bill is voided instead of edited — see Phase 12 note on why bills are never edited after issue
+  voidReason      String?
+  voidedByStaffId String?
+  voidedByStaff   Staff?        @relation("VoidedBills", fields: [voidedByStaffId], references: [id], onDelete: SetNull)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -382,8 +410,11 @@ model Bill {
   gamingSessions GamingSession[]
   payments       Payment[]
 
+  @@unique([invoiceNumber, financialYear])
   @@index([tableId])
   @@index([paymentStatus])
+  @@index([customerId])
+  @@index([createdAt])
 }
 
 // A bill can be settled with more than one payment — split tender
@@ -416,4 +447,51 @@ model PurchasePayment {
   createdAt       DateTime              @default(now())
 
   @@index([purchaseOrderId])
+}
+
+// ─────────────────────────────────────────────
+// Business settings (Phase 11 & Phase 14)
+// ─────────────────────────────────────────────
+
+// Singleton — always exactly one row. Fetch via findFirst(), not by a
+// known id, so the app doesn't hardcode a specific row's id anywhere.
+model BusinessProfile {
+  id                       String   @id @default(uuid())
+  businessName             String
+  address                  String?
+  phone                    String?
+  email                    String?
+  gstin                    String?  // GSTIN, printed on every bill once set
+  fssaiNumber              String?  // food license number, common requirement for Indian food businesses
+  logoUrl                  String?  // Cloudinary URL
+  receiptFooterNote        String?  // e.g. "Thank you for visiting Cafe Woody's!"
+  defaultGstPercent        Decimal  @default(5) // fallback total GST % (CGST+SGST combined) used only when a MenuItem or Zone doesn't specify its own rate — NOT the rate for everything. See MenuItem.gstPercent / Zone.gstPercent.
+  gamingGracePeriodMinutes Int      @default(5) // forgiveness window applied at each 30-min slab boundary when closing a gaming session — see Phase 12
+  printerIpAddress         String?  // WiFi thermal printer's local IP, e.g. "192.168.1.123" — set from the counter app's Settings screen, read by the native print plugin. Phase 14.
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+}
+
+// An automatic discount rule (e.g. "Happy Hour Gaming 5-7pm, 20% off").
+// Evaluated at bill-generation time — see billing.service.mjs. A bill's
+// actual discountAmount/discountReason (on the Bill model) is still the
+// single source of truth for what was applied; this table is the
+// configuration that produces a suggested value, not a live link.
+model DiscountRule {
+  id         String        @id @default(uuid())
+  name       String
+  type       DiscountType
+  value      Int           // percentage (0-100) if type=PERCENTAGE, paise if type=FLAT
+  scope      DiscountScope @default(ALL)
+  zoneId     String?
+  zone       Zone?         @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  daysOfWeek Int[]         // 0=Sunday..6=Saturday, empty = every day
+  startTime  String?       // "HH:mm", null = no time restriction
+  endTime    String?       // "HH:mm"
+  isActive   Boolean       @default(true)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([isActive])
+  @@index([zoneId])
 }

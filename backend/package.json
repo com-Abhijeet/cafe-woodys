@@ -1,10 +1,12 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Cafe Woody's Backend API",
+  "main": "src/server.mjs",
   "type": "module",
   "scripts": {
+    "build": "prisma generate",
+    "start": "node src/server.mjs",
     "dev": "nodemon src/server.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",

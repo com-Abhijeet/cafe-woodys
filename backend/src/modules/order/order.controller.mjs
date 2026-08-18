@@ -62,5 +62,15 @@ export const orderController = {
     } catch (err) {
       next(err);
     }
+  },
+
+  async closeDay(req, res, next) {
+    try {
+      const { force } = req.body || {};
+      const result = await orderService.closeDay({ force: !!force });
+      return res.json({ data: result });
+    } catch (err) {
+      next(err);
+    }
   }
 };

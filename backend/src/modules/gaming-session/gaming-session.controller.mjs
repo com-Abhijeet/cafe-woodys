@@ -31,7 +31,8 @@ export const gamingSessionController = {
   async closePlayerSession(req, res, next) {
     try {
       const { tableId, id } = req.params;
-      const closedSession = await gamingSessionService.closePlayerSession(tableId, id);
+      const { endTime } = req.body || {};
+      const closedSession = await gamingSessionService.closePlayerSession(tableId, id, { endTime });
       return res.json({ data: closedSession });
     } catch (err) {
       next(err);

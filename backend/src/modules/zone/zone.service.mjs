@@ -2,9 +2,25 @@ import { zoneRepository } from './zone.repository.mjs';
 import { NotFoundError } from '../../shared/errors/not-found-error.mjs';
 import { ConflictError } from '../../shared/errors/conflict-error.mjs';
 
+// In-Memory Cache (60-second TTL) for Zone Configuration
+let cachedZones = null;
+let cacheExpiry = 0;
+const CACHE_TTL_MS = 60000;
+
+function invalidateZoneCache() {
+  cachedZones = null;
+  cacheExpiry = 0;
+}
+
 export const zoneService = {
   async listZones() {
-    return zoneRepository.findAll();
+    if (cachedZones && Date.now() < cacheExpiry) {
+      return cachedZones;
+    }
+    const zones = await zoneRepository.findAll();
+    cachedZones = zones;
+    cacheExpiry = Date.now() + CACHE_TTL_MS;
+    return zones;
   },
 
   async getZoneById(id) {
@@ -16,6 +32,7 @@ export const zoneService = {
   },
 
   async createZone(data) {
+    invalidateZoneCache();
     const cleanData = { ...data };
     if (cleanData.type === 'CAFE') {
       cleanData.defaultHalfHourRate = null;
@@ -26,6 +43,7 @@ export const zoneService = {
   },
 
   async updateZone(id, data) {
+    invalidateZoneCache();
     const existing = await zoneRepository.findById(id);
     if (!existing) {
       throw new NotFoundError('Zone not found', 'ZONE_NOT_FOUND');
@@ -44,6 +62,7 @@ export const zoneService = {
   },
 
   async deleteZone(id) {
+    invalidateZoneCache();
     const existing = await zoneRepository.findById(id);
     if (!existing) {
       throw new NotFoundError('Zone not found', 'ZONE_NOT_FOUND');

@@ -11,8 +11,9 @@ export async function startPlayerSessionApi(tableId, playerLabel) {
   });
 }
 
-export async function closePlayerSessionApi(tableId, sessionId) {
+export async function closePlayerSessionApi(tableId, sessionId, endTime) {
   return apiClient(`/tables/${tableId}/gaming-sessions/${sessionId}/close`, {
-    method: 'PATCH'
+    method: 'PATCH',
+    ...(endTime ? { body: { endTime } } : {})
   });
 }

@@ -2,7 +2,8 @@ import { orderRepository } from './order.repository.mjs';
 import { menuItemRepository } from '../menu-item/menu-item.repository.mjs';
 import { tableService } from '../table/table.service.mjs';
 import { tableRepository } from '../table/table.repository.mjs';
-import { broadcastOrderCreated, broadcastTableUpdate, broadcastKitchenStatusUpdated } from '../../realtime/broadcast.mjs';
+import { businessProfileService } from '../business-profile/business-profile.service.mjs';
+import { broadcastOrderCreated, broadcastTableUpdate, broadcastKitchenStatusUpdated, broadcastOrderBoardCleared } from '../../realtime/broadcast.mjs';
 import { NotFoundError } from '../../shared/errors/not-found-error.mjs';
 import { ValidationError } from '../../shared/errors/validation-error.mjs';
 import { ConflictError } from '../../shared/errors/conflict-error.mjs';
@@ -37,6 +38,34 @@ export const orderService = {
 
   async listOrders(filters = {}) {
     return orderRepository.findAllOrders(filters);
+  },
+
+  async closeDay({ force = false } = {}) {
+    const unresolved = await orderRepository.findUnresolvedBoardOrders();
+
+    if (unresolved.length > 0 && !force) {
+      return {
+        canClose: false,
+        unresolvedOrdersCount: unresolved.length,
+        unresolvedOrders: unresolved.map((o) => ({
+          orderId: o.id,
+          tableName: o.table?.name || 'Unknown Table',
+          itemCount: o.items?.reduce((sum, i) => sum + i.quantity, 0) || 0,
+          status: o.status,
+          kitchenStatus: o.kitchenStatus,
+          createdAt: o.createdAt
+        }))
+      };
+    }
+
+    const { clearedCount, timestamp } = await orderRepository.clearBoardOrders();
+    broadcastOrderBoardCleared({ clearedCount, timestamp });
+
+    return {
+      canClose: true,
+      clearedOrdersCount: clearedCount,
+      timestamp
+    };
   },
 
   async updateKitchenStatus(id, newKitchenStatus, requestingUser) {
@@ -120,6 +149,9 @@ export const orderService = {
       throw new NotFoundError('Table not found', 'TABLE_NOT_FOUND');
     }
 
+    const profile = await businessProfileService.getProfile();
+    const defaultGst = profile ? profile.defaultGstPercent : 5;
+
     const menuItemIds = items.map((i) => i.menuItemId);
     const dbMenuItems = await menuItemRepository.findByIds(menuItemIds);
     const dbMenuMap = new Map(dbMenuItems.map((m) => [m.id, m]));
@@ -134,10 +166,13 @@ export const orderService = {
         throw new ValidationError(`Menu item '${menuItem.name}' is currently unavailable`, 'ITEM_UNAVAILABLE');
       }
 
+      const resolvedGst = menuItem.gstPercent != null ? Number(menuItem.gstPercent) : defaultGst;
+
       preparedItems.push({
         menuItemId: item.menuItemId,
         quantity: item.quantity,
-        priceSnapshot: menuItem.price
+        priceSnapshot: menuItem.price,
+        gstPercentSnapshot: resolvedGst
       });
     }
 
