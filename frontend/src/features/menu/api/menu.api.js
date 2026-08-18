@@ -1,4 +1,4 @@
-import { apiClient } from '../../../lib/apiClient';
+import { apiClient, BASE_URL } from '../../../lib/apiClient';
 
 export async function listMenuItemsApi(category, available) {
   const params = new URLSearchParams();
@@ -34,10 +34,10 @@ export async function uploadMenuItemImageApi(id, file) {
   formData.append('image', file);
 
   const token = localStorage.getItem('cafe_woodys_token');
-  const response = await fetch(`http://localhost:5000/api/menu-items/${id}/image`, {
+  const response = await fetch(`${BASE_URL}/menu-items/${id}/image`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${token}`
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
     },
     body: formData
   });
