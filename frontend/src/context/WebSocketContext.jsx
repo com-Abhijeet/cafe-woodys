@@ -37,9 +37,16 @@ export function WebSocketProvider({ children }) {
       }
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.hostname === 'localhost' ? 'localhost:5000' : window.location.host;
-    const wsUrl = `${protocol}//${host}?token=${token}`;
+    let wsBaseUrl = import.meta.env.VITE_WS_URL;
+    if (!wsBaseUrl) {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.hostname === 'localhost' ? 'localhost:5000' : window.location.host;
+      wsBaseUrl = `${protocol}//${host}`;
+    }
+
+    // Remove trailing slash if present
+    const cleanBaseUrl = wsBaseUrl.replace(/\/$/, '');
+    const wsUrl = `${cleanBaseUrl}?token=${token}`;
 
     setStatus('connecting');
 
