@@ -23,11 +23,35 @@ async function generateInvoiceNumber(tx, billDate = new Date()) {
   return { invoiceNumber: count + 1, financialYear };
 }
 
-function calculateLineTax(taxableAmount, gstPercent) {
-  const totalTax = Math.round(taxableAmount * (Number(gstPercent || 0) / 100));
+export function calculateLineAmounts(amount, gstPercent, pricesIncludeTax) {
+  const rate = Number(gstPercent || 0);
+  if (pricesIncludeTax) {
+    // amount already contains tax — extract it rather than add it
+    const taxableBase = amount / (1 + rate / 100);
+    const totalTax = amount - taxableBase;
+    const roundedTax = Math.round(totalTax);
+    const cgst = Math.round(roundedTax / 2);
+    const sgst = roundedTax - cgst;
+    return {
+      taxableBase: Math.round(taxableBase),
+      totalTax: roundedTax,
+      cgst,
+      sgst,
+      lineTotal: amount
+    };
+  }
+
+  // Default behavior — tax added on top of menu price
+  const totalTax = Math.round(amount * (rate / 100));
   const cgst = Math.round(totalTax / 2);
   const sgst = totalTax - cgst;
-  return { cgst, sgst, totalTax };
+  return {
+    taxableBase: amount,
+    totalTax,
+    cgst,
+    sgst,
+    lineTotal: amount + totalTax
+  };
 }
 
 function enrichBill(bill) {
@@ -55,6 +79,130 @@ export const billingService = {
   async listBills(filters = {}) {
     const bills = await billingRepository.findAllBills(filters);
     return bills.map(enrichBill);
+  },
+
+  // Phase 17 Step 5: Check kitchen status for unserved orders before bill commit
+  async checkKitchenStatus(tableId) {
+    const openOrders = await prisma.order.findMany({
+      where: { tableId, status: 'OPEN' },
+      include: {
+        items: {
+          include: { menuItem: true }
+        }
+      }
+    });
+
+    const unfinished = [];
+    for (const order of openOrders) {
+      if (order.kitchenStatus !== 'SERVED') {
+        unfinished.push({
+          orderId: order.id,
+          kitchenStatus: order.kitchenStatus,
+          createdAt: order.createdAt,
+          items: order.items.map((i) => ({
+            name: i.menuItem?.name || 'Item',
+            quantity: i.quantity
+          }))
+        });
+      }
+    }
+
+    return unfinished;
+  },
+
+  // Phase 17 Step 6: Non-destructive, read-only bill preview endpoint
+  async getBillPreview(tableId) {
+    const table = await tableService.getTableById(tableId);
+    if (!table) {
+      throw new NotFoundError('Table not found', 'TABLE_NOT_FOUND');
+    }
+
+    const openOrders = await prisma.order.findMany({
+      where: { tableId, status: 'OPEN' },
+      include: { items: { include: { menuItem: true } } }
+    });
+
+    const unbilledSessions = await prisma.gamingSession.findMany({
+      where: { tableId, billId: null }
+    });
+
+    const profile = await businessProfileService.getProfile();
+    const graceMinutes = profile?.gamingGracePeriodMinutes ?? 5;
+    const pricesIncludeTax = Boolean(profile?.pricesIncludeTax);
+    const now = new Date();
+
+    const lines = [];
+    let foodTotal = 0;
+
+    for (const order of openOrders) {
+      for (const item of order.items) {
+        const itemTotal = item.priceSnapshot * item.quantity;
+        foodTotal += itemTotal;
+        lines.push({
+          subtotal: itemTotal,
+          gstPercent: Number(item.gstPercentSnapshot || 5)
+        });
+      }
+    }
+
+    let gamingTotal = 0;
+    for (const session of unbilledSessions) {
+      const sessionEndTime = (session.status === 'ACTIVE' || !session.endTime) ? now : session.endTime;
+      const elapsedMinutes = Math.max(1, Math.ceil((sessionEndTime - new Date(session.startTime)) / (1000 * 60)));
+      const charge = calculateSlotCharge(
+        elapsedMinutes,
+        session.halfHourRateSnapshot,
+        session.hourlyRateSnapshot,
+        session.maxChargeCap,
+        graceMinutes
+      );
+      gamingTotal += charge;
+      lines.push({
+        subtotal: charge,
+        gstPercent: Number(session.gstPercentSnapshot || 18)
+      });
+    }
+
+    const grossSubtotal = foodTotal + gamingTotal;
+    const discountPreview = await this.previewDiscount(tableId);
+    const discountAmount = discountPreview.suggestedDiscountAmount || 0;
+    const discountReason = discountPreview.suggestedDiscountReason || null;
+
+    let totalCgst = 0;
+    let totalSgst = 0;
+
+    for (const line of lines) {
+      let lineAmount = line.subtotal;
+      if (discountAmount > 0 && grossSubtotal > 0) {
+        const lineDiscount = Math.round((line.subtotal / grossSubtotal) * discountAmount);
+        lineAmount = Math.max(0, line.subtotal - lineDiscount);
+      }
+      const { cgst, sgst } = calculateLineAmounts(lineAmount, line.gstPercent, pricesIncludeTax);
+      totalCgst += cgst;
+      totalSgst += sgst;
+    }
+
+    const grandTotal = pricesIncludeTax
+      ? Math.max(0, grossSubtotal - discountAmount)
+      : Math.max(0, grossSubtotal - discountAmount) + totalCgst + totalSgst;
+
+    const unfinishedKitchenOrders = await this.checkKitchenStatus(tableId);
+
+    return {
+      table: { id: table.id, name: table.name, zone: table.zone },
+      foodTotal,
+      gamingTotal,
+      grossSubtotal,
+      discountAmount,
+      discountReason,
+      cgstAmount: totalCgst,
+      sgstAmount: totalSgst,
+      grandTotal,
+      orders: openOrders,
+      gamingSessions: unbilledSessions,
+      unfinishedKitchenOrders,
+      pricesIncludeTax
+    };
   },
 
   async previewDiscount(tableId) {
@@ -141,10 +289,20 @@ export const billingService = {
     };
   },
 
-  async generateBill(tableId, staffId, { discountAmount = 0, discountReason = null, customerId = null }) {
+  async generateBill(tableId, staffId, { discountAmount = 0, discountReason = null, customerId = null, autoPayMethod = null, ignoreKitchenWarning = false }) {
     const table = await tableService.getTableById(tableId);
     if (!table) {
       throw new NotFoundError('Table not found', 'TABLE_NOT_FOUND');
+    }
+
+    // Phase 17 Step 5: Check kitchen status unless ignoreKitchenWarning override is true
+    if (!ignoreKitchenWarning) {
+      const unfinished = await this.checkKitchenStatus(tableId);
+      if (unfinished.length > 0) {
+        const err = new ValidationError('Table has unfinished kitchen orders that have not been served yet', 'KITCHEN_NOT_FINISHED');
+        err.data = { unfinishedOrders: unfinished };
+        throw err;
+      }
     }
 
     if (discountAmount > 0 && (!discountReason || !discountReason.trim())) {
@@ -157,6 +315,7 @@ export const billingService = {
 
     const profile = await businessProfileService.getProfile();
     const graceMinutes = profile?.gamingGracePeriodMinutes ?? 5;
+    const pricesIncludeTax = Boolean(profile?.pricesIncludeTax);
     const now = new Date();
 
     // Execute checkout in single atomic database transaction
@@ -239,20 +398,26 @@ export const billingService = {
       let totalSgst = 0;
 
       for (const line of lines) {
-        let lineTaxable = line.subtotal;
+        let lineAmount = line.subtotal;
         if (discountAmount > 0 && grossSubtotal > 0) {
           const lineDiscount = Math.round((line.subtotal / grossSubtotal) * discountAmount);
-          lineTaxable = Math.max(0, line.subtotal - lineDiscount);
+          lineAmount = Math.max(0, line.subtotal - lineDiscount);
         }
-        const { cgst, sgst } = calculateLineTax(lineTaxable, line.gstPercent);
+        const { cgst, sgst } = calculateLineAmounts(lineAmount, line.gstPercent, pricesIncludeTax);
         totalCgst += cgst;
         totalSgst += sgst;
       }
 
-      const grandTotal = Math.max(0, grossSubtotal - discountAmount) + totalCgst + totalSgst;
+      const grandTotal = pricesIncludeTax
+        ? Math.max(0, grossSubtotal - discountAmount)
+        : Math.max(0, grossSubtotal - discountAmount) + totalCgst + totalSgst;
 
       // 5. Generate sequential integer invoice number & financial year
       const { invoiceNumber, financialYear } = await generateInvoiceNumber(tx, now);
+
+      // Initial Payment Status
+      const isAutoPay = Boolean(autoPayMethod);
+      const initialPaymentStatus = isAutoPay ? 'PAID' : 'UNPAID';
 
       // 6. Create Bill record
       const bill = await tx.bill.create({
@@ -269,7 +434,7 @@ export const billingService = {
           discountAmount,
           discountReason: discountAmount > 0 ? (discountReason?.trim() || 'Staff Discount') : null,
           grandTotal,
-          paymentStatus: 'UNPAID'
+          paymentStatus: initialPaymentStatus
         }
       });
 
@@ -286,6 +451,25 @@ export const billingService = {
         await tx.gamingSession.updateMany({
           where: { id: { in: unbilledSessions.map((s) => s.id) } },
           data: { billId: bill.id }
+        });
+      }
+
+      // Quick Full Payment Settlement if autoPayMethod selected
+      if (isAutoPay) {
+        await tx.payment.create({
+          data: {
+            billId: bill.id,
+            amount: grandTotal,
+            method: autoPayMethod,
+            reference: 'Instant Quick Checkout Settlement',
+            paidAt: now
+          }
+        });
+
+        // Set table status to FREE
+        await tx.table.update({
+          where: { id: tableId },
+          data: { status: 'FREE' }
         });
       }
 
@@ -417,6 +601,22 @@ export const billingService = {
     broadcastTableUpdate(updatedTable);
 
     return fullBill;
+  },
+
+  async bulkSettleBills(billIds, { method = 'CASH', reference = 'Bulk Settlement' }) {
+    const settledBills = [];
+    for (const id of billIds) {
+      try {
+        const bill = await this.getBillById(id);
+        if (bill && !bill.voidedAt && bill.paymentStatus !== 'PAID' && bill.remainingBalance > 0) {
+          const updated = await this.addPayment(id, { amount: bill.remainingBalance, method, reference });
+          settledBills.push(updated);
+        }
+      } catch (err) {
+        console.warn(`Bulk settle skipped bill ${id}:`, err.message);
+      }
+    }
+    return settledBills;
   },
 
   async updateBillCustomer(billId, customerId) {

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { NotificationProvider } from '../../context/NotificationContext';
 import { Sidebar } from './Sidebar';
+import { BottomNav } from './BottomNav';
 import { WebSocketStatusIndicator } from './WebSocketStatusIndicator';
 import { Button } from '../ui/Button/Button';
 import { LogOut, User } from 'lucide-react';
@@ -22,14 +23,18 @@ export function AppShell({ activeTab, onSelectTab, children }) {
   return (
     <NotificationProvider onNavigateTab={onSelectTab}>
       <div style={{ minHeight: '100vh', backgroundColor: 'var(--color-bg)', display: 'flex' }}>
-        {/* 1. Left / Bottom Navigation Bar */}
-        <Sidebar
-          activeTab={activeTab}
-          onSelectTab={onSelectTab}
-          role={user?.role}
-          isCollapsed={isCollapsed}
-          onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
-        />
+        {/* 1. Left Sidebar (Desktop) or Bottom Navigation Bar (Mobile) */}
+        {isMobile ? (
+          <BottomNav activeTab={activeTab} onSelectTab={onSelectTab} role={user?.role} />
+        ) : (
+          <Sidebar
+            activeTab={activeTab}
+            onSelectTab={onSelectTab}
+            role={user?.role}
+            isCollapsed={isCollapsed}
+            onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
+          />
+        )}
 
         {/* 2. Main Content Wrapper */}
         <div style={{

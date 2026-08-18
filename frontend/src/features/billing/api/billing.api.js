@@ -1,5 +1,9 @@
 import { apiClient } from '../../../lib/apiClient';
 
+export async function fetchBillPreviewApi(tableId) {
+  return apiClient(`/tables/${tableId}/bill-preview`);
+}
+
 export async function generateBillApi(tableId, billData = {}) {
   return apiClient(`/tables/${tableId}/bill`, {
     method: 'POST',

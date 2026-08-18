@@ -1,41 +1,38 @@
 import { useState, useEffect } from 'react';
-import { useBilling } from '../hooks/useBilling';
-import { fetchBillPreviewApi } from '../api/billing.api';
+import { fetchBillPreviewApi } from '../../billing/api/billing.api';
+import { useBilling } from '../../billing/hooks/useBilling';
 import { CustomerResolveField } from '../../customers/components/CustomerResolveField';
 import { printBillViaRawBT } from '../../../lib/rawbtPrinter';
-import { UpiQrCode } from './UpiQrCode';
-import { KitchenStatusWarningModal } from './KitchenStatusWarningModal';
+import { KitchenStatusWarningModal } from '../../billing/components/KitchenStatusWarningModal';
 import { triggerHapticNotification } from '../../../lib/native/nativeManager';
 import { Input } from '../../../components/ui/Input/Input';
 import { Button } from '../../../components/ui/Button/Button';
-import { ArrowLeft, Printer, CheckCircle2, CreditCard, Plus, Receipt, ShieldAlert, Check } from 'lucide-react';
-import styles from './CheckoutModal.module.css';
+import { ArrowLeft, Printer, CheckCircle2, CreditCard, Plus, Receipt } from 'lucide-react';
+import styles from '../../billing/components/CheckoutModal.module.css';
 
-export function WorkspaceBillingView({ bill: initialBill, table, onBackToOrdering, onRefreshTable }) {
-  const { currentBill, createBill, submitPayment, attachCustomerToBill } = useBilling();
-  const activeBill = currentBill || initialBill;
+export function BillPreview({ table, onBackToOrdering, onRefreshTable }) {
+  const { createBill, submitPayment, attachCustomerToBill } = useBilling();
 
-  // Read-Only Bill Preview State (Step 6)
   const [previewData, setPreviewData] = useState(null);
-  const [isPreviewLoading, setIsPreviewLoading] = useState(!activeBill);
-  const [committedBill, setCommittedBill] = useState(activeBill);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(true);
+  const [committedBill, setCommittedBill] = useState(null);
 
-  // Quick Checkout vs Tab/Split Payment Mode Toggle (Phase 16 Step 6)
+  // Quick Checkout vs Tab/Split Payment Mode Toggle
   const [recordPaymentDifferently, setRecordPaymentDifferently] = useState(false);
   const [quickPayMethod, setQuickPayMethod] = useState('CASH');
 
-  // Kitchen Status Warning Override Modal (Step 5)
+  // Step 5: Kitchen Status Warning Modal State
   const [unfinishedKitchenOrders, setUnfinishedKitchenOrders] = useState([]);
   const [showKitchenModal, setShowKitchenModal] = useState(false);
 
-  // Settlement Form State
+  // Settlement Form State for Multi-Payment / Tab
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [payAmountRs, setPayAmountRs] = useState('');
   const [reference, setReference] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionError, setActionError] = useState('');
 
-  // Fetch Read-Only Bill Preview if no committed bill yet
+  // Step 6: Fetch Read-Only Bill Preview from GET /tables/:tableId/bill-preview
   useEffect(() => {
     if (!committedBill && table?.id) {
       setIsPreviewLoading(true);
@@ -79,7 +76,7 @@ export function WorkspaceBillingView({ bill: initialBill, table, onBackToOrderin
     }
   };
 
-  // Commit Bill Generation (Step 5 & 6)
+  // Step 5 & 6: Explicit "Generate Bill" Commit Action
   const handleCommitBillGeneration = async (ignoreKitchenWarning = false) => {
     setActionError('');
     setIsSubmitting(true);
@@ -89,6 +86,7 @@ export function WorkspaceBillingView({ bill: initialBill, table, onBackToOrderin
       const discountReason = previewData?.discountReason || null;
       const autoPayMethod = recordPaymentDifferently ? null : quickPayMethod;
 
+      // Always recomputes fresh from current OPEN orders & sessions at commit time!
       const newBill = await createBill(table.id, {
         discountAmount,
         discountReason,
@@ -159,7 +157,7 @@ export function WorkspaceBillingView({ bill: initialBill, table, onBackToOrderin
   if (isPreviewLoading) {
     return (
       <div style={{ padding: 'var(--space-5)', textAlign: 'center', backgroundColor: 'var(--color-bg)', height: '100%' }}>
-        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>Computing non-destructive bill preview...</p>
+        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>Loading read-only bill preview...</p>
       </div>
     );
   }
@@ -174,7 +172,7 @@ export function WorkspaceBillingView({ bill: initialBill, table, onBackToOrderin
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: 'var(--color-bg)' }}>
-      {/* 1. Header */}
+      {/* 1. Header Bar */}
       <div style={{
         height: '60px',
         backgroundColor: 'var(--color-surface)',
@@ -188,7 +186,7 @@ export function WorkspaceBillingView({ bill: initialBill, table, onBackToOrderin
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
           <Button variant="secondary" onClick={onBackToOrdering} style={{ fontSize: 'var(--text-xs)', padding: '6px 12px' }}>
-            <ArrowLeft size={16} /> Return to Menu / Ordering
+            <ArrowLeft size={16} /> Return to Menu / Order Taking
           </Button>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
@@ -230,7 +228,7 @@ export function WorkspaceBillingView({ bill: initialBill, table, onBackToOrderin
           gap: 'var(--space-4)',
           boxShadow: 'var(--shadow-card)'
         }}>
-          {/* Customer Resolve Field */}
+          {/* Customer Details */}
           <div>
             <h3 style={{ margin: '0 0 10px 0', fontSize: 'var(--text-base)', color: 'var(--color-brand)', fontWeight: 800 }}>
               Customer Details & CRM
@@ -242,7 +240,7 @@ export function WorkspaceBillingView({ bill: initialBill, table, onBackToOrderin
             />
           </div>
 
-          {/* Checkout Controls */}
+          {/* Checkout & Bill Generation Controls */}
           <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 'var(--space-3)' }}>
             {actionError && <div style={{ color: 'var(--color-danger)', fontSize: 'var(--text-xs)', marginBottom: '8px' }}>{actionError}</div>}
 
@@ -253,7 +251,7 @@ export function WorkspaceBillingView({ bill: initialBill, table, onBackToOrderin
                   <CreditCard size={18} /> Quick Checkout & Bill Generation
                 </h3>
 
-                {/* Tab / Split Payment Override Checkbox */}
+                {/* Tab / Split Payment Override Toggle */}
                 <div style={{ padding: 'var(--space-3)', backgroundColor: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', marginBottom: '12px' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: 'var(--text-xs)', fontWeight: 700, cursor: 'pointer' }}>
                     <input
@@ -286,6 +284,7 @@ export function WorkspaceBillingView({ bill: initialBill, table, onBackToOrderin
                   </div>
                 )}
 
+                {/* Explicit "Generate Bill" Commit Button */}
                 <Button
                   onClick={() => handleCommitBillGeneration(false)}
                   disabled={isSubmitting}
@@ -296,7 +295,7 @@ export function WorkspaceBillingView({ bill: initialBill, table, onBackToOrderin
                 </Button>
               </div>
             ) : isPaid ? (
-              /* COMMITTED MODE: Fully Paid Box */
+              /* COMMITTED MODE: Fully Paid Success Box */
               <div className={styles.paidSuccessBox}>
                 <CheckCircle2 size={40} />
                 <div style={{ fontSize: 'var(--text-base)', fontWeight: 800 }}>Invoice Fully Paid & Settled</div>
@@ -349,7 +348,7 @@ export function WorkspaceBillingView({ bill: initialBill, table, onBackToOrderin
               </form>
             )}
 
-            {/* Payments History Log */}
+            {/* Payments Log */}
             {committedBill?.payments?.length > 0 && (
               <div style={{ marginTop: 'var(--space-3)' }}>
                 <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-text-secondary)', marginBottom: '6px' }}>
@@ -373,7 +372,7 @@ export function WorkspaceBillingView({ bill: initialBill, table, onBackToOrderin
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Bill Itemization & Thermal Print Action */}
+        {/* RIGHT COLUMN: Bill Preview Breakdown & Print Action */}
         <div style={{
           backgroundColor: 'var(--color-surface)',
           borderRadius: 'var(--radius-lg)',
@@ -385,7 +384,7 @@ export function WorkspaceBillingView({ bill: initialBill, table, onBackToOrderin
           boxShadow: 'var(--shadow-card)'
         }}>
           <h3 style={{ margin: 0, fontSize: 'var(--text-base)', color: 'var(--color-brand)', fontWeight: 800, borderBottom: '1px solid var(--color-border)', paddingBottom: '8px' }}>
-            {committedBill ? 'Order & Service Itemization' : 'Live Bill Preview Itemization'}
+            {committedBill ? 'Order & Service Itemization' : 'Read-Only Bill Preview Breakdown'}
           </h3>
 
           {/* Food & Drinks Lines */}
@@ -462,7 +461,7 @@ export function WorkspaceBillingView({ bill: initialBill, table, onBackToOrderin
             )}
           </div>
 
-          {/* Action: Print Thermal Receipt */}
+          {/* Print Action */}
           {committedBill && (
             <Button
               variant="secondary"

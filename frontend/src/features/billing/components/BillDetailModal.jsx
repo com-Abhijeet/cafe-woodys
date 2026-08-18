@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useBilling } from '../hooks/useBilling';
 import { useAuth } from '../../../hooks/useAuth';
+import { useBusinessProfile } from '../../settings/hooks/useBusinessProfile';
 import { printBillViaRawBT } from '../../../lib/rawbtPrinter';
+import { UpiQrCode } from './UpiQrCode';
 import { Input } from '../../../components/ui/Input/Input';
 import { Button } from '../../../components/ui/Button/Button';
 import { X, Receipt, Printer, CheckCircle2, Clock, Plus, CreditCard, User, AlertOctagon, Ban } from 'lucide-react';
@@ -10,6 +12,7 @@ import styles from './CheckoutModal.module.css';
 export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
   const { user } = useAuth();
   const { currentBill, submitPayment, voidBill } = useBilling();
+  const { profile } = useBusinessProfile();
   const activeBill = currentBill || initialBill;
 
   const [paymentMethod, setPaymentMethod] = useState('CASH');
@@ -211,11 +214,21 @@ export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
             </div>
           </div>
 
-          {/* Right Column: In-Place Payment Marking */}
+          {/* Right Column: In-Place Payment Marking & Dynamic UPI QR Code */}
           <div className={styles.paymentPanel}>
             <div style={{ fontWeight: 700, fontSize: 'var(--text-base)', color: 'var(--color-brand)', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <CreditCard size={18} /> In-Place Payment Settlement
             </div>
+
+            {/* Phase 16 Step 5: On-Screen Dynamic Amount-Embedded UPI QR Code */}
+            {!isVoided && !isPaid && profile?.upiId && (
+              <UpiQrCode
+                upiId={profile.upiId}
+                upiPayeeName={profile.upiPayeeName || profile.businessName}
+                amountPaise={activeBill.remainingBalance || activeBill.grandTotal}
+                note={invoiceTitle}
+              />
+            )}
 
             {actionError && <div style={{ color: 'var(--color-danger)', fontSize: 'var(--text-xs)' }}>{actionError}</div>}
 

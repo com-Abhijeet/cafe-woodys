@@ -14,6 +14,35 @@ export const billingController = {
       const bill = await billingService.generateBill(tableId, req.user.id, parseResult.data);
       return res.status(201).json({ data: bill });
     } catch (err) {
+      if (err.code === 'KITCHEN_NOT_FINISHED') {
+        return res.status(400).json({
+          error: {
+            message: err.message,
+            code: err.code,
+            data: err.data
+          }
+        });
+      }
+      next(err);
+    }
+  },
+
+  async getBillPreview(req, res, next) {
+    try {
+      const { tableId } = req.params;
+      const preview = await billingService.getBillPreview(tableId);
+      return res.json({ data: preview });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async checkKitchenStatus(req, res, next) {
+    try {
+      const { tableId } = req.params;
+      const unfinished = await billingService.checkKitchenStatus(tableId);
+      return res.json({ data: unfinished, isClear: unfinished.length === 0 });
+    } catch (err) {
       next(err);
     }
   },
@@ -38,6 +67,20 @@ export const billingController = {
 
       const updatedBill = await billingService.addPayment(billId, parseResult.data);
       return res.json({ data: updatedBill });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async bulkSettleBills(req, res, next) {
+    try {
+      const { billIds, method, reference } = req.body || {};
+      if (!Array.isArray(billIds) || billIds.length === 0) {
+        throw new ValidationError('Please provide an array of billIds to settle', 'VALIDATION_ERROR');
+      }
+
+      const settled = await billingService.bulkSettleBills(billIds, { method, reference });
+      return res.json({ data: settled, count: settled.length });
     } catch (err) {
       next(err);
     }

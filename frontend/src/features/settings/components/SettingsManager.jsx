@@ -3,18 +3,19 @@ import { BusinessProfileForm } from './BusinessProfileForm';
 import { ZoneTableManager } from '../../zones/components/ZoneTableManager';
 import { StaffManager } from '../../auth/components/StaffManager';
 import { DiscountRulesManager } from '../../discounts/components/DiscountRulesManager';
-import { Building2, LayoutGrid, Users, Tag } from 'lucide-react';
+import { AboutSection } from './AboutSection';
+import { Building2, LayoutGrid, Users, Tag, Info } from 'lucide-react';
 import styles from './SettingsManager.module.css';
 
 export function SettingsManager() {
-  const [activeSubTab, setActiveSubTab] = useState('PROFILE'); // 'PROFILE' | 'ZONES' | 'DISCOUNTS' | 'STAFF'
+  const [activeSubTab, setActiveSubTab] = useState('PROFILE'); // 'PROFILE' | 'ZONES' | 'DISCOUNTS' | 'STAFF' | 'ABOUT'
 
   return (
     <div className={styles.container}>
       <div className={styles.header}>
         <div>
           <h2 className={styles.title}>System Settings & Configuration</h2>
-          <p className={styles.subtitle}>Configure store business profile, tax fallbacks, discount rules, zone pricing, and staff accounts</p>
+          <p className={styles.subtitle}>Configure store business profile, tax modes, printer roll width, discount rules, zone pricing, and staff accounts</p>
         </div>
       </div>
 
@@ -25,7 +26,7 @@ export function SettingsManager() {
           onClick={() => setActiveSubTab('PROFILE')}
         >
           <Building2 size={16} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
-          Business Profile & Tax
+          Business Profile & Thermal Receipt
         </button>
 
         <button
@@ -51,6 +52,14 @@ export function SettingsManager() {
           <Users size={16} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
           Staff Accounts & Roles
         </button>
+
+        <button
+          className={`${styles.tabBtn} ${activeSubTab === 'ABOUT' ? styles.activeTab : ''}`}
+          onClick={() => setActiveSubTab('ABOUT')}
+        >
+          <Info size={16} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
+          About System
+        </button>
       </div>
 
       {/* Sub-Tab Views */}
@@ -58,6 +67,7 @@ export function SettingsManager() {
       {activeSubTab === 'DISCOUNTS' && <DiscountRulesManager />}
       {activeSubTab === 'ZONES' && <ZoneTableManager />}
       {activeSubTab === 'STAFF' && <StaffManager />}
+      {activeSubTab === 'ABOUT' && <AboutSection />}
     </div>
   );
 }

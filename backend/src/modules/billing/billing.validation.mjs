@@ -2,8 +2,10 @@ import { z } from 'zod';
 
 export const generateBillSchema = z.object({
   discountAmount: z.number().int().min(0).default(0), // paise
-  taxAmount: z.number().int().min(0).default(0),      // paise
-  customerId: z.string().optional().nullable()
+  discountReason: z.string().optional().nullable(),
+  customerId: z.string().optional().nullable(),
+  autoPayMethod: z.enum(['CASH', 'UPI', 'CARD', 'OTHER']).optional().nullable(),
+  ignoreKitchenWarning: z.boolean().optional().default(false)
 });
 
 export const addPaymentSchema = z.object({

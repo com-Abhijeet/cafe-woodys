@@ -1,15 +1,13 @@
 import { useState } from 'react';
 import { useMenu } from '../../menu/hooks/useMenu';
 import { useOrders } from '../../orders/hooks/useOrders';
-import { useBilling } from '../../billing/hooks/useBilling';
-import { fetchDiscountPreviewApi } from '../../discounts/api/discountRule.api';
 import { CategorySidebar } from './CategorySidebar';
 import { MenuItemGrid } from './MenuItemGrid';
 import { OrderTabs } from './OrderTabs';
 import { PlayerSessionsPanel } from './PlayerSessionsPanel';
-import { WorkspaceBillingView } from '../../billing/components/WorkspaceBillingView';
+import { BillPreview } from './BillPreview';
 import { Button } from '../../../components/ui/Button/Button';
-import { X, Receipt, Utensils, Gamepad2 } from 'lucide-react';
+import { X, Eye, Utensils, Gamepad2 } from 'lucide-react';
 import styles from './TableWorkspaceModal.module.css';
 
 export function TableWorkspaceModal({ table, onClose, onRefreshTable }) {
@@ -23,13 +21,11 @@ export function TableWorkspaceModal({ table, onClose, onRefreshTable }) {
 
   const { items: menuItems, isLoading: isMenuLoading } = useMenu();
   const { orders, unbilledFoodTotal, submitOrder } = useOrders(table.id);
-  const { createBill } = useBilling();
 
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [cart, setCart] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionError, setActionError] = useState('');
-  const [activeCheckoutBill, setActiveCheckoutBill] = useState(null);
 
   const categories = Array.from(new Set(menuItems.map((m) => m.category))).filter(Boolean);
   const filteredMenuItems = selectedCategory === 'ALL'
@@ -86,39 +82,17 @@ export function TableWorkspaceModal({ table, onClose, onRefreshTable }) {
     }
   };
 
-  const handleGenerateBill = async () => {
+  // Phase 17 Step 6: Non-destructive "View Bill" action
+  const handleViewBill = () => {
     setActionError('');
-    setIsSubmitting(true);
-    try {
-      let discountAmount = 0;
-      let discountReason = null;
-      try {
-        const preview = await fetchDiscountPreviewApi(table.id);
-        if (preview?.suggestedDiscountAmount > 0) {
-          discountAmount = preview.suggestedDiscountAmount;
-          discountReason = preview.suggestedDiscountReason;
-        }
-      } catch (e) {
-        console.warn('Discount preview lookup error:', e.message);
-      }
-
-      const bill = await createBill(table.id, { discountAmount, discountReason });
-      setActiveCheckoutBill(bill);
-      setWorkspaceView('BILLING');
-      if (onRefreshTable) onRefreshTable();
-    } catch (err) {
-      setActionError(err.message);
-    } finally {
-      setIsSubmitting(false);
-    }
+    setWorkspaceView('BILLING');
   };
 
   return (
     <div className={styles.fullScreenOverlay}>
-      {workspaceView === 'BILLING' && activeCheckoutBill ? (
-        /* Full-Page Billing View */
-        <WorkspaceBillingView
-          bill={activeCheckoutBill}
+      {workspaceView === 'BILLING' ? (
+        /* Render BillPreview component for non-destructive read-only preview & explicit commit action */
+        <BillPreview
           table={table}
           onBackToOrdering={() => setWorkspaceView('ORDERING')}
           onRefreshTable={onRefreshTable}
@@ -143,8 +117,8 @@ export function TableWorkspaceModal({ table, onClose, onRefreshTable }) {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
               {hasUnbilledContent && (
-                <Button onClick={handleGenerateBill} disabled={isSubmitting}>
-                  <Receipt size={16} /> Checkout & Generate Bill
+                <Button onClick={handleViewBill} disabled={isSubmitting}>
+                  <Eye size={16} /> View Bill Preview
                 </Button>
               )}
               <button className={styles.closeBtn} onClick={onClose} title="Close Workspace">

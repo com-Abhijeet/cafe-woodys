@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { useMenu } from '../hooks/useMenu';
 import { RecipeBuilderModal } from '../../recipes/components/RecipeBuilderModal';
 import { getTransformedImageUrl } from '../../../lib/cloudinary';
+import { pickMenuItemPhoto } from '../../../lib/media/pickMenuItemPhoto';
+import { triggerHapticNotification, isNativeApp } from '../../../lib/native/nativeManager';
 import { Input } from '../../../components/ui/Input/Input';
 import { Button } from '../../../components/ui/Button/Button';
-import { Plus, Edit2, Trash2, CheckCircle, XCircle, BookOpen, Image, Upload, Utensils } from 'lucide-react';
+import { Plus, Edit2, Trash2, CheckCircle, XCircle, BookOpen, Image, Upload, Utensils, Camera } from 'lucide-react';
 import styles from './MenuManager.module.css';
 
 export function MenuManager() {
@@ -58,6 +60,20 @@ export function MenuManager() {
     setShowModal(true);
   };
 
+  const handleNativeCameraPick = async () => {
+    const photo = await pickMenuItemPhoto();
+    if (photo && photo.webPath) {
+      try {
+        const response = await fetch(photo.webPath);
+        const blob = await response.blob();
+        const file = new File([blob], `photo_${Date.now()}.${photo.format || 'jpg'}`, { type: `image/${photo.format || 'jpeg'}` });
+        setSelectedFile(file);
+      } catch (err) {
+        console.error('Failed to convert photo blob:', err);
+      }
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setActionError('');
@@ -81,11 +97,12 @@ export function MenuManager() {
         savedItem = await addMenuItem(payload);
       }
 
-      // If an image file was selected, upload it
+      // If an image file was selected, upload it to Cloudinary
       if (selectedFile && savedItem?.id) {
         await uploadImage(savedItem.id, selectedFile);
       }
 
+      triggerHapticNotification();
       setShowModal(false);
     } catch (err) {
       setActionError(err.message);
@@ -226,17 +243,30 @@ export function MenuManager() {
 
               <Input label="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Short item description" />
 
-              {/* Photo Upload Field */}
+              {/* Photo Upload Field: Native Camera Prompt vs Web File Input */}
               <div>
                 <label style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-text-secondary)', display: 'block', marginBottom: '4px' }}>
                   Dish Photo Upload (Cloudinary)
                 </label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setSelectedFile(e.target.files[0] || null)}
-                  style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}
-                />
+                {isNativeApp() ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <Button type="button" variant="secondary" onClick={handleNativeCameraPick} style={{ fontSize: 'var(--text-xs)' }}>
+                      <Camera size={16} /> {selectedFile ? 'Change Photo (Camera/Gallery)' : 'Take Photo / Select from Gallery'}
+                    </Button>
+                    {selectedFile && (
+                      <span style={{ fontSize: '10px', color: 'var(--color-success)', fontWeight: 700 }}>
+                        ✓ Photo selected: {selectedFile.name}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setSelectedFile(e.target.files[0] || null)}
+                    style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}
+                  />
+                )}
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

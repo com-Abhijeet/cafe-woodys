@@ -108,6 +108,11 @@ enum DiscountScope {
   ZONE        // a specific Zone, see DiscountRule.zoneId
 }
 
+enum ThermalPaperWidth {
+  MM_58 // ~32 characters/line at standard font — confirm against the actual printer's spec, this is a common default not a guarantee
+  MM_80 // ~48 characters/line at standard font
+}
+
 // ─────────────────────────────────────────────
 // Staff & Auth
 // ─────────────────────────────────────────────
@@ -344,20 +349,20 @@ model SmsLog {
 // ─────────────────────────────────────────────
 
 model Order {
-  id             String        @id @default(uuid())
-  tableId        String
-  table          Table         @relation(fields: [tableId], references: [id], onDelete: Restrict)
-  customerId     String?
-  customer       Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  staffId        String
-  staff          Staff         @relation(fields: [staffId], references: [id], onDelete: Restrict)
-  billId         String?
-  bill           Bill?         @relation(fields: [billId], references: [id], onDelete: SetNull)
-  status         OrderStatus   @default(OPEN)
-  kitchenStatus  KitchenStatus @default(PENDING)
-  boardClearedAt DateTime?     // set by the end-of-day "Close Day" action — hides this order from the live order tracker without touching status/kitchenStatus, which stay as the real historical record
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  id         String      @id @default(uuid())
+  tableId    String
+  table      Table       @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  customerId String?
+  customer   Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  staffId    String
+  staff      Staff       @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  billId     String?
+  bill       Bill?       @relation(fields: [billId], references: [id], onDelete: SetNull)
+  status     OrderStatus @default(OPEN)
+  kitchenStatus KitchenStatus @default(PENDING)
+  boardClearedAt DateTime? // set by the end-of-day "Close Day" action — hides this order from the live order tracker without touching status/kitchenStatus, which stay as the real historical record
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
 
   items OrderItem[]
 
@@ -368,15 +373,15 @@ model Order {
 }
 
 model OrderItem {
-  id                 String   @id @default(uuid())
-  orderId            String
-  order              Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  menuItemId         String
-  menuItem           MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
-  quantity           Int
-  priceSnapshot      Int      // paise, MenuItem.price at time of order — never re-read live price for historical orders
-  gstPercentSnapshot Decimal  // MenuItem.gstPercent (or BusinessProfile.defaultGstPercent fallback) at time of order — frozen, same reasoning as priceSnapshot
-  createdAt          DateTime @default(now())
+  id                String   @id @default(uuid())
+  orderId           String
+  order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId        String
+  menuItem          MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
+  quantity          Int
+  priceSnapshot     Int      // paise, MenuItem.price at time of order — never re-read live price for historical orders
+  gstPercentSnapshot Decimal // MenuItem.gstPercent (or BusinessProfile.defaultGstPercent fallback) at time of order — frozen, same reasoning as priceSnapshot
+  createdAt         DateTime @default(now())
 
   @@index([orderId])
 }
@@ -450,26 +455,31 @@ model PurchasePayment {
 }
 
 // ─────────────────────────────────────────────
-// Business settings (Phase 11 & Phase 14)
+// Business settings (Phase 11)
 // ─────────────────────────────────────────────
 
 // Singleton — always exactly one row. Fetch via findFirst(), not by a
 // known id, so the app doesn't hardcode a specific row's id anywhere.
 model BusinessProfile {
-  id                       String   @id @default(uuid())
-  businessName             String
-  address                  String?
-  phone                    String?
-  email                    String?
-  gstin                    String?  // GSTIN, printed on every bill once set
-  fssaiNumber              String?  // food license number, common requirement for Indian food businesses
-  logoUrl                  String?  // Cloudinary URL
-  receiptFooterNote        String?  // e.g. "Thank you for visiting Cafe Woody's!"
-  defaultGstPercent        Decimal  @default(5) // fallback total GST % (CGST+SGST combined) used only when a MenuItem or Zone doesn't specify its own rate — NOT the rate for everything. See MenuItem.gstPercent / Zone.gstPercent.
-  gamingGracePeriodMinutes Int      @default(5) // forgiveness window applied at each 30-min slab boundary when closing a gaming session — see Phase 12
-  printerIpAddress         String?  // WiFi thermal printer's local IP, e.g. "192.168.1.123" — set from the counter app's Settings screen, read by the native print plugin. Phase 14.
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  id                String   @id @default(uuid())
+  businessName      String
+  address           String?
+  phone             String?
+  email             String?
+  gstin             String?  // GSTIN, printed on every bill once set
+  fssaiNumber       String?  // food license number, common requirement for Indian food businesses
+  logoUrl           String?  // Cloudinary URL
+  receiptFooterNote String?  // e.g. "Thank you for visiting Cafe Woody's!"
+  defaultGstPercent Decimal  @default(5) // fallback total GST % (CGST+SGST combined) used only when a MenuItem or Zone doesn't specify its own rate — NOT the rate for everything. See MenuItem.gstPercent / Zone.gstPercent.
+  gamingGracePeriodMinutes Int @default(5) // forgiveness window applied at each 30-min slab boundary when closing a gaming session — see Phase 12
+  printerIpAddress String? // WiFi thermal printer's local IP, e.g. "192.168.1.123" — set from the counter app's Settings screen, read by the native print plugin. Phase 14.
+  pricesIncludeTax Boolean @default(false) // global, not per-item — if true, MenuItem.price/gaming rates are treated as tax-inclusive and GST is extracted from within the price rather than added on top. See Phase 16.
+  thermalPaperWidth ThermalPaperWidth @default(MM_80) // drives receipt character width/wrapping. See Phase 16.
+  upiId String? // e.g. "cafewoodys@okicici" — used to generate amount-embedded UPI QR codes on bills
+  upiPayeeName String? // display name shown in the customer's UPI app during payment
+  autoMarkBillsPaidInFull Boolean @default(false) // if true, billing defaults to instantly recording full payment — overridable per bill. See Phase 16.
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 // An automatic discount rule (e.g. "Happy Hour Gaming 5-7pm, 20% off").
