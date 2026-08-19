@@ -3,7 +3,9 @@ import { useTables } from '../hooks/useTables';
 import { useZones } from '../../zones/hooks/useZones';
 import { TableCard } from './TableCard';
 import { TableWorkspaceModal } from './TableWorkspaceModal';
-import { RefreshCw } from 'lucide-react';
+import { ParcelWorkspaceModal } from './ParcelWorkspaceModal';
+import { Button } from '../../../components/ui/Button/Button';
+import { RefreshCw, ShoppingBag } from 'lucide-react';
 import styles from './TableGrid.module.css';
 
 export function TableGrid({ onSelectTable }) {
@@ -13,6 +15,7 @@ export function TableGrid({ onSelectTable }) {
   const [selectedZoneFilter, setSelectedZoneFilter] = useState('ALL');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('ALL');
   const [activeModalTable, setActiveModalTable] = useState(null);
+  const [showParcelModal, setShowParcelModal] = useState(false);
 
   const filteredTables = tables.filter((table) => {
     if (selectedZoneFilter !== 'ALL' && table.zoneId !== selectedZoneFilter) {
@@ -44,30 +47,37 @@ export function TableGrid({ onSelectTable }) {
 
   return (
     <div className={styles.container}>
-      {/* Quick Summary Stats Bar */}
-      <div className={styles.statsBar}>
-        <div className={styles.statCard}>
-          <span className={styles.statValue}>{totalTables}</span>
-          <span className={styles.statLabel}>Total Floor Tables</span>
+      {/* Quick Summary Stats Bar & Action Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
+        <div className={styles.statsBar} style={{ margin: 0, flex: 1 }}>
+          <div className={styles.statCard}>
+            <span className={styles.statValue}>{totalTables}</span>
+            <span className={styles.statLabel}>Total Floor Tables</span>
+          </div>
+          <div className={styles.statCard}>
+            <span className={styles.statValue} style={{ color: 'var(--color-success)' }}>
+              {freeTables}
+            </span>
+            <span className={styles.statLabel}>Free Tables</span>
+          </div>
+          <div className={styles.statCard}>
+            <span className={styles.statValue} style={{ color: 'var(--color-warning)' }}>
+              {occupiedTables}
+            </span>
+            <span className={styles.statLabel}>Occupied Tables</span>
+          </div>
+          <div className={styles.statCard}>
+            <span className={styles.statValue} style={{ color: 'var(--color-gaming-zone)' }}>
+              {totalActivePlayers}
+            </span>
+            <span className={styles.statLabel}>Active Gaming Players</span>
+          </div>
         </div>
-        <div className={styles.statCard}>
-          <span className={styles.statValue} style={{ color: 'var(--color-success)' }}>
-            {freeTables}
-          </span>
-          <span className={styles.statLabel}>Free Tables</span>
-        </div>
-        <div className={styles.statCard}>
-          <span className={styles.statValue} style={{ color: 'var(--color-warning)' }}>
-            {occupiedTables}
-          </span>
-          <span className={styles.statLabel}>Occupied Tables</span>
-        </div>
-        <div className={styles.statCard}>
-          <span className={styles.statValue} style={{ color: 'var(--color-gaming-zone)' }}>
-            {totalActivePlayers}
-          </span>
-          <span className={styles.statLabel}>Active Gaming Players</span>
-        </div>
+
+        {/* Action: New Parcel Order */}
+        <Button onClick={() => setShowParcelModal(true)} style={{ backgroundColor: 'var(--color-success)', color: '#fff' }}>
+          <ShoppingBag size={18} /> New Parcel / Takeaway Order
+        </Button>
       </div>
 
       {/* Filter Controls Bar */}
@@ -141,11 +151,19 @@ export function TableGrid({ onSelectTable }) {
         </div>
       )}
 
-      {/* Full-Screen Workspace Modal */}
+      {/* Full-Screen Workspace Modal for Dine-In Table */}
       {activeModalTable && (
         <TableWorkspaceModal
           table={activeModalTable}
           onClose={() => setActiveModalTable(null)}
+          onRefreshTable={refreshTables}
+        />
+      )}
+
+      {/* Full-Screen Workspace Modal for Parcel / Takeaway */}
+      {showParcelModal && (
+        <ParcelWorkspaceModal
+          onClose={() => setShowParcelModal(false)}
           onRefreshTable={refreshTables}
         />
       )}

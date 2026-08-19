@@ -22,7 +22,16 @@ export function AppShell({ activeTab, onSelectTab, children }) {
 
   return (
     <NotificationProvider onNavigateTab={onSelectTab}>
-      <div style={{ minHeight: '100vh', backgroundColor: 'var(--color-bg)', display: 'flex' }}>
+      <div style={{
+        minHeight: '100vh',
+        backgroundColor: 'var(--color-bg)',
+        display: 'flex',
+        paddingTop: 'var(--safe-area-top)',
+        paddingBottom: 'var(--safe-area-bottom)',
+        paddingLeft: 'var(--safe-area-left)',
+        paddingRight: 'var(--safe-area-right)',
+        boxSizing: 'border-box'
+      }}>
         {/* 1. Left Sidebar (Desktop) or Bottom Navigation Bar (Mobile) */}
         {isMobile ? (
           <BottomNav activeTab={activeTab} onSelectTab={onSelectTab} role={user?.role} />

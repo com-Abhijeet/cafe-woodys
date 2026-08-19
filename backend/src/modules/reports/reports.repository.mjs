@@ -50,7 +50,37 @@ export const reportsRepository = {
       bucket.billCount += 1;
     }
 
-    return Array.from(bucketsMap.values());
+    // Step 7: Order Count & Dine-In / Parcel Split
+    const whereOrders = {
+      status: { not: 'CANCELLED' }
+    };
+    if (dateFrom || dateTo) {
+      whereOrders.createdAt = {};
+      if (dateFrom) whereOrders.createdAt.gte = new Date(dateFrom);
+      if (dateTo) {
+        const endDate = new Date(dateTo);
+        endDate.setHours(23, 59, 59, 999);
+        whereOrders.createdAt.lte = endDate;
+      }
+    }
+
+    const orders = await prisma.order.findMany({
+      where: whereOrders,
+      select: { orderType: true }
+    });
+
+    const totalOrders = orders.length;
+    const dineInOrders = orders.filter((o) => o.orderType === 'DINE_IN' || !o.orderType).length;
+    const parcelOrders = orders.filter((o) => o.orderType === 'PARCEL').length;
+
+    const summary = Array.from(bucketsMap.values());
+
+    return {
+      summary,
+      totalOrders,
+      dineInOrders,
+      parcelOrders
+    };
   },
 
   async getTopItems({ dateFrom, dateTo, limit = 10 }) {

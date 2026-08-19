@@ -49,7 +49,9 @@ export const orderService = {
         unresolvedOrdersCount: unresolved.length,
         unresolvedOrders: unresolved.map((o) => ({
           orderId: o.id,
-          tableName: o.table?.name || 'Unknown Table',
+          dailyOrderNumber: o.dailyOrderNumber,
+          orderType: o.orderType,
+          tableName: o.table?.name || (o.orderType === 'PARCEL' ? 'Parcel' : 'Unknown'),
           itemCount: o.items?.reduce((sum, i) => sum + i.quantity, 0) || 0,
           status: o.status,
           kitchenStatus: o.kitchenStatus,
@@ -121,7 +123,10 @@ export const orderService = {
       throw new ConflictError('Order is already cancelled', 'ALREADY_CANCELLED');
     }
 
-    // Check if 60-second window or kitchen prep has started
+    // Step 6: Admin-configurable order cancellation window in seconds
+    const profile = await businessProfileService.getProfile();
+    const cancellationWindowSecs = profile?.orderCancellationWindowSeconds ?? 300;
+
     const createdTime = new Date(order.createdAt).getTime();
     const now = new Date().getTime();
     const elapsedSecs = Math.floor((now - createdTime) / 1000);
@@ -133,8 +138,8 @@ export const orderService = {
       throw new ConflictError('Cannot cancel order after kitchen has started preparation', 'KITCHEN_PREP_STARTED');
     }
 
-    if (elapsedSecs > 60 && role !== 'ADMIN' && role !== 'COUNTER') {
-      throw new ConflictError('60-second undo window expired. Please request Counter or Admin to cancel.', 'UNDO_WINDOW_EXPIRED');
+    if (elapsedSecs > cancellationWindowSecs && role !== 'ADMIN' && role !== 'COUNTER') {
+      throw new ConflictError(`Cancellation window (${Math.round(cancellationWindowSecs / 60)} minutes) expired. Please request Counter or Admin to cancel.`, 'UNDO_WINDOW_EXPIRED');
     }
 
     const cancelledOrder = await orderRepository.cancelOrderWithTransaction(id);
@@ -143,10 +148,15 @@ export const orderService = {
     return cancelledOrder;
   },
 
-  async createTableOrder(tableId, staffId, { items, customerId }) {
-    const table = await tableService.getTableById(tableId);
-    if (!table) {
-      throw new NotFoundError('Table not found', 'TABLE_NOT_FOUND');
+  async createOrder(staffId, { tableId, orderType = 'DINE_IN', items, customerId }) {
+    if (orderType === 'DINE_IN') {
+      if (!tableId) {
+        throw new ValidationError('tableId is required for DINE_IN orders', 'TABLE_REQUIRED');
+      }
+      const table = await tableService.getTableById(tableId);
+      if (!table) {
+        throw new NotFoundError('Table not found', 'TABLE_NOT_FOUND');
+      }
     }
 
     const profile = await businessProfileService.getProfile();
@@ -177,20 +187,27 @@ export const orderService = {
     }
 
     const createdOrder = await orderRepository.createOrderWithTransaction({
-      tableId,
+      tableId: orderType === 'PARCEL' ? null : tableId,
+      orderType,
       staffId,
       customerId: customerId || null,
       items: preparedItems
     });
 
-    if (table.status === 'FREE') {
-      await tableRepository.update(tableId, { status: 'OCCUPIED' });
+    if (orderType === 'DINE_IN' && tableId) {
+      const table = await tableService.getTableById(tableId);
+      if (table && table.status === 'FREE') {
+        await tableRepository.update(tableId, { status: 'OCCUPIED' });
+        const updatedTable = await tableService.getTableById(tableId);
+        broadcastTableUpdate(updatedTable);
+      }
     }
 
-    const updatedTable = await tableService.getTableById(tableId);
     broadcastOrderCreated(createdOrder);
-    broadcastTableUpdate(updatedTable);
-
     return createdOrder;
+  },
+
+  async createTableOrder(tableId, staffId, { items, customerId }) {
+    return this.createOrder(staffId, { tableId, orderType: 'DINE_IN', items, customerId });
   }
 };

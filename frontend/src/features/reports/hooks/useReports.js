@@ -11,6 +11,10 @@ export function useReports(filters = {}) {
   const { dateFrom, dateTo, groupBy = 'day' } = filters;
 
   const [salesSummary, setSalesSummary] = useState([]);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [dineInOrders, setDineInOrders] = useState(0);
+  const [parcelOrders, setParcelOrders] = useState(0);
+
   const [topItems, setTopItems] = useState([]);
   const [zonePerformance, setZonePerformance] = useState([]);
   const [staffPerformance, setStaffPerformance] = useState([]);
@@ -23,7 +27,7 @@ export function useReports(filters = {}) {
     setIsLoading(true);
     setError(null);
     try {
-      const [sales, items, zones, staff, payments] = await Promise.all([
+      const [salesRes, items, zones, staff, payments] = await Promise.all([
         fetchSalesSummaryApi({ dateFrom, dateTo, groupBy }),
         fetchTopItemsApi({ dateFrom, dateTo, limit: 10 }),
         fetchZonePerformanceApi({ dateFrom, dateTo }),
@@ -31,7 +35,12 @@ export function useReports(filters = {}) {
         fetchPaymentMethodsApi({ dateFrom, dateTo })
       ]);
 
-      setSalesSummary(sales || []);
+      const list = Array.isArray(salesRes) ? salesRes : (salesRes?.summary || []);
+      setSalesSummary(list);
+      setTotalOrders(salesRes?.totalOrders ?? list.reduce((sum, b) => sum + (b.billCount || 0), 0));
+      setDineInOrders(salesRes?.dineInOrders ?? 0);
+      setParcelOrders(salesRes?.parcelOrders ?? 0);
+
       setTopItems(items || []);
       setZonePerformance(zones || []);
       setStaffPerformance(staff || []);
@@ -49,6 +58,9 @@ export function useReports(filters = {}) {
 
   return {
     salesSummary,
+    totalOrders,
+    dineInOrders,
+    parcelOrders,
     topItems,
     zonePerformance,
     staffPerformance,

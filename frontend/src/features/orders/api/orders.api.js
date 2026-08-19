@@ -10,3 +10,14 @@ export async function submitTableOrderApi(tableId, items, customerId = null) {
     body: { items, customerId }
   });
 }
+
+export async function submitParcelOrderApi(items, customerId = null) {
+  return apiClient('/orders', {
+    method: 'POST',
+    body: {
+      orderType: 'PARCEL',
+      items,
+      customerId
+    }
+  });
+}

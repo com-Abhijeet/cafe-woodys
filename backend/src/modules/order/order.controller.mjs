@@ -16,8 +16,8 @@ export const orderController = {
 
   async listOrders(req, res, next) {
     try {
-      const { kitchenStatus, tableId, status, sort } = req.query;
-      const orders = await orderService.listOrders({ kitchenStatus, tableId, status, sort });
+      const { kitchenStatus, tableId, orderType, status, sort } = req.query;
+      const orders = await orderService.listOrders({ kitchenStatus, tableId, orderType, status, sort });
       return res.json({ data: orders });
     } catch (err) {
       next(err);
@@ -49,19 +49,26 @@ export const orderController = {
     }
   },
 
-  async createTableOrder(req, res, next) {
+  async createOrder(req, res, next) {
     try {
-      const { tableId } = req.params;
       const parseResult = createOrderSchema.safeParse(req.body);
       if (!parseResult.success) {
         throw new ValidationError('Invalid order input', 'VALIDATION_ERROR', parseResult.error.flatten().fieldErrors);
       }
 
-      const newOrder = await orderService.createTableOrder(tableId, req.user.id, parseResult.data);
+      const tableId = req.params.tableId || parseResult.data.tableId;
+      const newOrder = await orderService.createOrder(req.user.id, {
+        ...parseResult.data,
+        tableId
+      });
       return res.status(201).json({ data: newOrder });
     } catch (err) {
       next(err);
     }
+  },
+
+  async createTableOrder(req, res, next) {
+    return this.createOrder(req, res, next);
   },
 
   async closeDay(req, res, next) {

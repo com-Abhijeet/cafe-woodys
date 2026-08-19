@@ -8,6 +8,7 @@ router.use(requireAuth);
 
 // Board & Status routes
 router.get('/orders', orderController.listOrders);
+router.post('/orders', orderController.createOrder);
 router.post('/orders/close-day', requireRole(['ADMIN']), orderController.closeDay);
 router.patch('/orders/:id/kitchen-status', orderController.updateKitchenStatus);
 router.patch('/orders/:id/cancel', orderController.cancelOrder);

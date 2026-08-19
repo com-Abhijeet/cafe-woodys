@@ -1,6 +1,14 @@
 import prisma from '../../shared/db/client.mjs';
 import { ConflictError } from '../../shared/errors/conflict-error.mjs';
 
+async function getNextDailyOrderNumber(tx) {
+  const lastOrder = await tx.order.findFirst({
+    where: { boardClearedAt: null },
+    orderBy: { dailyOrderNumber: 'desc' }
+  });
+  return (lastOrder?.dailyOrderNumber ?? 0) + 1;
+}
+
 export const orderRepository = {
   async findByTableId(tableId, status = 'OPEN') {
     const where = { tableId };
@@ -33,12 +41,13 @@ export const orderRepository = {
     });
   },
 
-  async findAllOrders({ kitchenStatus, tableId, status, sort = 'createdAt_desc', includeCleared = false } = {}) {
+  async findAllOrders({ kitchenStatus, tableId, orderType, status, sort = 'createdAt_desc', includeCleared = false } = {}) {
     const where = {};
     if (!includeCleared) {
       where.boardClearedAt = null;
     }
     if (tableId) where.tableId = tableId;
+    if (orderType) where.orderType = orderType;
 
     // By default, exclude CANCELLED orders unless explicitly requested
     if (status) {
@@ -142,9 +151,12 @@ export const orderRepository = {
     });
   },
 
-  async createOrderWithTransaction({ tableId, staffId, customerId, items }) {
+  async createOrderWithTransaction({ tableId, orderType = 'DINE_IN', staffId, customerId, items }) {
     return prisma.$transaction(async (tx) => {
-      // 1. Auto-deduct raw material inventory for recipe-linked menu items
+      // 1. Generate sequential daily order number for current business day (resets on Close Day)
+      const dailyOrderNumber = await getNextDailyOrderNumber(tx);
+
+      // 2. Auto-deduct raw material inventory for recipe-linked menu items
       for (const item of items) {
         const ingredients = await tx.recipeIngredient.findMany({
           where: { menuItemId: item.menuItemId },
@@ -172,12 +184,14 @@ export const orderRepository = {
         }
       }
 
-      // 2. Create Order & OrderItem rows
+      // 3. Create Order & OrderItem rows
       return tx.order.create({
         data: {
-          tableId,
+          tableId: orderType === 'PARCEL' ? null : tableId,
+          orderType,
+          dailyOrderNumber,
           staffId,
-          customerId,
+          customerId: customerId || null,
           status: 'OPEN',
           kitchenStatus: 'PENDING',
           items: {
@@ -192,6 +206,7 @@ export const orderRepository = {
         include: {
           table: { select: { id: true, name: true } },
           staff: { select: { id: true, username: true } },
+          customer: { select: { id: true, name: true, phone: true } },
           items: { include: { menuItem: true } }
         }
       });

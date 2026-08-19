@@ -1,4 +1,10 @@
 :root {
+  /* Safe-Area Notch and Camera Cutout Insets (Phase 18) */
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+
   /* Base palette — warm, café-toned */
   --color-bg: #FAF6F1;
   --color-surface: #FFFFFF;

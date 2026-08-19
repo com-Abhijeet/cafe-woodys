@@ -1,3 +1,13 @@
+import { formatInvoiceNumber } from './invoiceFormat';
+
+export function getCharsPerLine(profile = {}) {
+  if (profile.thermalCharsPerLineOverride && Number(profile.thermalCharsPerLineOverride) > 0) {
+    return Number(profile.thermalCharsPerLineOverride);
+  }
+  const widthMm = Number(profile.thermalPaperWidthMm) || (profile.thermalPaperWidth === 'MM_58' ? 58 : 80);
+  return Math.max(16, Math.floor(widthMm * 0.6));
+}
+
 function padRight(str, len) {
   return (str + ' '.repeat(len)).slice(0, len);
 }
@@ -14,10 +24,11 @@ function centerText(str, width) {
 }
 
 export function formatReceiptText(bill, options = {}) {
-  const width = options.width || 32; // 32 chars for 58mm thermal, 48 chars for 80mm
+  const profile = options.businessProfile || bill.businessProfile || {};
+  const width = options.width || getCharsPerLine(profile);
+
   const divider = '-'.repeat(width);
   const doubleDivider = '='.repeat(width);
-  const profile = options.businessProfile || bill.businessProfile || {};
 
   const lines = [];
 
@@ -42,13 +53,13 @@ export function formatReceiptText(bill, options = {}) {
 
   // Invoice & Metadata
   const invoiceNo = typeof bill.invoiceNumber === 'number'
-    ? `Invoice #${bill.invoiceNumber} (${bill.financialYear || ''})`
+    ? formatInvoiceNumber(bill.invoiceNumber, bill.financialYear)
     : (bill.invoiceNumber || `Bill #${bill.id.slice(-6).toUpperCase()}`);
   const dateStr = bill.createdAt ? new Date(bill.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : new Date().toLocaleString();
 
   lines.push(`Invoice  : ${invoiceNo}`);
   lines.push(`Date     : ${dateStr}`);
-  lines.push(`Table    : ${bill.table?.name || 'N/A'}`);
+  lines.push(`Table    : ${bill.table?.name || (bill.orderType === 'PARCEL' ? 'Parcel / Takeaway' : 'N/A')}`);
   if (bill.staff?.username) {
     lines.push(`Staff    : ${bill.staff.username}`);
   }
@@ -68,7 +79,7 @@ export function formatReceiptText(bill, options = {}) {
       const nameStr = item.menuItem?.name || 'Food Item';
       const amountStr = `₹${((item.priceSnapshot * item.quantity) / 100).toFixed(2)}`;
 
-      const maxNameLen = width - 8 - qtyStr.length;
+      const maxNameLen = Math.max(4, width - 8 - qtyStr.length);
       const truncatedName = nameStr.length > maxNameLen ? nameStr.slice(0, maxNameLen - 1) + '.' : nameStr;
 
       const leftPart = padRight(qtyStr + truncatedName, width - 8);
@@ -80,7 +91,7 @@ export function formatReceiptText(bill, options = {}) {
   const gamingSessions = bill.gamingSessions || [];
   if (gamingSessions.length > 0) {
     lines.push(divider);
-    lines.push(padRight('PLAYER', 12) + padRight('TIME', 8) + padLeft('TOTAL', width - 20));
+    lines.push(padRight('PLAYER', 12) + padRight('TIME', 8) + padLeft('TOTAL', Math.max(8, width - 20)));
     lines.push(divider);
 
     for (const session of gamingSessions) {
@@ -92,7 +103,7 @@ export function formatReceiptText(bill, options = {}) {
 
       const truncatedName = pName.length > 11 ? pName.slice(0, 10) + '.' : pName;
       const leftPart = padRight(truncatedName, 12) + padRight(durationStr, 8);
-      lines.push(leftPart + padLeft(`₹${(session.halfHourRateSnapshot / 100).toFixed(0)}/30m`, width - 20));
+      lines.push(leftPart + padLeft(`₹${(session.halfHourRateSnapshot / 100).toFixed(0)}/30m`, Math.max(8, width - 20)));
     }
   }
 
@@ -102,22 +113,22 @@ export function formatReceiptText(bill, options = {}) {
   const gamingTotalPaise = bill.gamingTotal || 0;
   const subtotalPaise = foodTotalPaise + gamingTotalPaise;
 
-  lines.push(padRight('Subtotal:', width - 10) + padLeft(`₹${(subtotalPaise / 100).toFixed(2)}`, 10));
+  lines.push(padRight('Subtotal:', Math.max(8, width - 10)) + padLeft(`₹${(subtotalPaise / 100).toFixed(2)}`, 10));
 
   if (bill.discountAmount > 0) {
     const reasonLabel = bill.discountReason ? ` (${bill.discountReason})` : '';
     const discountStr = `-₹${(bill.discountAmount / 100).toFixed(2)}`;
-    lines.push(padRight(`Discount${reasonLabel}:`, width - 10) + padLeft(discountStr, 10));
+    lines.push(padRight(`Discount${reasonLabel}:`, Math.max(8, width - 10)) + padLeft(discountStr, 10));
   }
 
   const cgst = bill.cgstAmount || 0;
   const sgst = bill.sgstAmount || 0;
 
-  lines.push(padRight('CGST:', width - 10) + padLeft(`₹${(cgst / 100).toFixed(2)}`, 10));
-  lines.push(padRight('SGST:', width - 10) + padLeft(`₹${(sgst / 100).toFixed(2)}`, 10));
+  lines.push(padRight('CGST:', Math.max(8, width - 10)) + padLeft(`₹${(cgst / 100).toFixed(2)}`, 10));
+  lines.push(padRight('SGST:', Math.max(8, width - 10)) + padLeft(`₹${(sgst / 100).toFixed(2)}`, 10));
 
   lines.push(divider);
-  lines.push(padRight('GRAND TOTAL:', width - 10) + padLeft(`₹${(bill.grandTotal / 100).toFixed(2)}`, 10));
+  lines.push(padRight('GRAND TOTAL:', Math.max(8, width - 10)) + padLeft(`₹${(bill.grandTotal / 100).toFixed(2)}`, 10));
   lines.push(divider);
 
   // Payments History
@@ -127,7 +138,7 @@ export function formatReceiptText(bill, options = {}) {
       const refStr = p.reference ? ` (${p.reference})` : '';
       const methodStr = `${p.method}${refStr}`;
       const amountStr = `₹${(p.amount / 100).toFixed(2)}`;
-      lines.push(padRight(methodStr, width - 10) + padLeft(amountStr, 10));
+      lines.push(padRight(methodStr, Math.max(8, width - 10)) + padLeft(amountStr, 10));
     }
     lines.push(`Status: ${bill.paymentStatus}`);
     lines.push(divider);

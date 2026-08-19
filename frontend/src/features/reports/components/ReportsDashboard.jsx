@@ -16,7 +16,7 @@ import {
   Legend,
   CartesianGrid
 } from 'recharts';
-import { Calendar, BarChart3, TrendingUp, Trophy, PieChart as PieIcon, Users, AlertCircle } from 'lucide-react';
+import { Calendar, BarChart3, TrendingUp, Trophy, PieChart as PieIcon, Users, AlertCircle, ShoppingBag, Utensils, Receipt } from 'lucide-react';
 import styles from './ReportsDashboard.module.css';
 
 const PIE_COLORS = ['#2E7D4F', '#3B6EC9', '#C97A3B', '#8E44AD', '#E74C3C'];
@@ -28,13 +28,15 @@ export function ReportsDashboard() {
 
   const {
     salesSummary,
+    totalOrders,
+    dineInOrders,
+    parcelOrders,
     topItems,
     zonePerformance,
     staffPerformance,
     paymentMethods,
     isLoading,
-    error,
-    refreshReports
+    error
   } = useReports({ dateFrom, dateTo, groupBy });
 
   // Format Sales Data for Recharts (convert paise to ₹)
@@ -67,7 +69,7 @@ export function ReportsDashboard() {
       <div className={styles.header}>
         <div>
           <h2 className={styles.title}>Reports & Business Analytics</h2>
-          <p className={styles.subtitle}>Track revenue trends, best-selling dishes, zone occupancy, staff performance, and daily cash-up</p>
+          <p className={styles.subtitle}>Track revenue trends, best-selling dishes, zone occupancy, staff performance, and order volumes</p>
         </div>
       </div>
 
@@ -117,6 +119,33 @@ export function ReportsDashboard() {
             Clear Dates
           </button>
         )}
+      </div>
+
+      {/* Step 7: Order Count Summary Metric Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--space-3)' }}>
+        <div style={{ padding: '16px', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-card)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <Receipt size={32} color="var(--color-brand)" />
+          <div>
+            <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--color-brand)' }}>{totalOrders}</div>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Total Orders Fulfilled</div>
+          </div>
+        </div>
+
+        <div style={{ padding: '16px', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-card)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <Utensils size={32} color="var(--color-primary)" />
+          <div>
+            <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--color-primary)' }}>{dineInOrders}</div>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Dine-In Table Orders</div>
+          </div>
+        </div>
+
+        <div style={{ padding: '16px', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-card)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <ShoppingBag size={32} color="var(--color-success)" />
+          <div>
+            <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--color-success)' }}>{parcelOrders}</div>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Parcel / Takeaway Orders</div>
+          </div>
+        </div>
       </div>
 
       {isLoading ? (
@@ -202,75 +231,64 @@ export function ReportsDashboard() {
                     <YAxis stroke="var(--color-text-secondary)" fontSize={12} unit="₹" />
                     <Tooltip formatter={(value) => [`₹${value}`, '']} />
                     <Legend />
-                    <Bar dataKey="Food" fill="#C97A3B" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="Gaming" fill="#3B6EC9" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="Food" fill="#C97A3B" />
+                    <Bar dataKey="Gaming" fill="#3B6EC9" />
                   </BarChart>
                 </ResponsiveContainer>
               )}
             </div>
           </div>
 
-          {/* List 1: Top 10 Best-Selling Menu Items */}
+          {/* Chart 4: Top-Selling Menu Items Ranking */}
           <div className={styles.chartCard}>
             <div className={styles.cardHeader}>
-              <Trophy size={18} color="#D4AF37" />
-              <h3 className={styles.cardTitle}>Top 10 Best-Selling Menu Items</h3>
+              <Trophy size={18} color="var(--color-brand)" />
+              <h3 className={styles.cardTitle}>Top 10 Selling Dishes</h3>
             </div>
-            {topItems.length === 0 ? (
-              <div className={styles.emptyChart}>No order items found in date range.</div>
-            ) : (
-              <div className={styles.tableList}>
-                {topItems.map((item, idx) => (
-                  <div key={item.id} className={styles.tableRow}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span className={styles.rankBadge}>#{idx + 1}</span>
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: 'var(--text-xs)' }}>{item.name}</div>
-                        <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>{item.category}</div>
-                      </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: 260, overflowY: 'auto' }}>
+              {topItems.length === 0 ? (
+                <div className={styles.emptyChart}>No dish sales recorded yet.</div>
+              ) : (
+                topItems.map((item, index) => (
+                  <div key={item.id} className={styles.topItemRow}>
+                    <span className={styles.rankBadge}>#{index + 1}</span>
+                    <div style={{ flex: 1 }}>
+                      <div className={styles.itemName}>{item.name}</div>
+                      <div className={styles.itemCategory}>{item.category}</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: 800, fontSize: 'var(--text-xs)', color: 'var(--color-brand)' }}>
-                        {item.totalQuantity} Sold
-                      </div>
-                      <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>
-                        ₹{(item.totalRevenue / 100).toFixed(2)}
-                      </div>
+                      <div className={styles.itemQty}>{item.totalQuantity} sold</div>
+                      <div className={styles.itemRevenue}>₹{(item.totalRevenue / 100).toFixed(2)}</div>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+                ))
+              )}
+            </div>
           </div>
 
-          {/* List 2: Staff Performance Leaderboard */}
+          {/* Chart 5: Staff Billing & Order Leaderboard */}
           <div className={styles.chartCard}>
             <div className={styles.cardHeader}>
               <Users size={18} color="var(--color-brand)" />
-              <h3 className={styles.cardTitle}>Staff Activity & Billing Leaderboard</h3>
+              <h3 className={styles.cardTitle}>Staff Sales & Billing Leaderboard</h3>
             </div>
-            {staffPerformance.length === 0 ? (
-              <div className={styles.emptyChart}>No staff activity logged in date range.</div>
-            ) : (
-              <div className={styles.tableList}>
-                {staffPerformance.map((staff) => (
-                  <div key={staff.id} className={styles.tableRow}>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 'var(--text-xs)' }}>{staff.username}</div>
-                      <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>Role: {staff.role}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: 260, overflowY: 'auto' }}>
+              {staffPerformance.length === 0 ? (
+                <div className={styles.emptyChart}>No staff sales activity recorded.</div>
+              ) : (
+                staffPerformance.map((staff) => (
+                  <div key={staff.id} className={styles.topItemRow}>
+                    <div style={{ flex: 1 }}>
+                      <div className={styles.itemName}>{staff.username} ({staff.role})</div>
+                      <div className={styles.itemCategory}>{staff.billsGenerated} Bills Issued</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: 800, fontSize: 'var(--text-xs)', color: 'var(--color-success)' }}>
-                        {staff.billsGenerated} Bills Generated
-                      </div>
-                      <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}>
-                        ₹{(staff.totalSales / 100).toFixed(2)} Revenue
-                      </div>
+                      <div className={styles.itemRevenue}>₹{(staff.totalSales / 100).toFixed(2)}</div>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+                ))
+              )}
+            </div>
           </div>
         </div>
       )}

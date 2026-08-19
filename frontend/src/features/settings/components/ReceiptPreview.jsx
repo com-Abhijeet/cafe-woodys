@@ -1,4 +1,4 @@
-import { formatReceipt } from '../../../lib/print/receiptFormatter';
+import { formatReceipt, getCharsPerLine } from '../../../lib/print/receiptFormatter';
 import { Printer } from 'lucide-react';
 import styles from './ReceiptPreview.module.css';
 
@@ -32,7 +32,8 @@ const SAMPLE_BILL = {
 
 export function ReceiptPreview({ profile }) {
   const formattedText = formatReceipt(SAMPLE_BILL, profile || {});
-  const is58mm = profile?.thermalPaperWidth === 'MM_58';
+  const charsPerLine = getCharsPerLine(profile || {});
+  const rollWidthMm = profile?.thermalPaperWidthMm || 80;
 
   return (
     <div className={styles.container}>
@@ -42,11 +43,11 @@ export function ReceiptPreview({ profile }) {
           <h3 className={styles.title}>Live Thermal Receipt Print Preview</h3>
         </div>
         <span style={{ fontSize: 'var(--text-xs)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--color-bg-secondary)', fontWeight: 700 }}>
-          Roll Width: {is58mm ? '58mm (~32 chars/line)' : '80mm (~48 chars/line)'}
+          Roll Width: {rollWidthMm}mm ({charsPerLine} chars/line)
         </span>
       </div>
 
-      <div className={`${styles.previewBox} ${is58mm ? styles.box58 : styles.box80}`}>
+      <div className={styles.previewBox} style={{ width: `${Math.min(100, Math.max(45, charsPerLine * 1.5))}%` }}>
         {formattedText}
       </div>
     </div>

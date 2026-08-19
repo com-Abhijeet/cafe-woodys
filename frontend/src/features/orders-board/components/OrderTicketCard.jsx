@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
+import { useBusinessProfile } from '../../settings/hooks/useBusinessProfile';
 import { EntityCard } from '../../../components/ui/EntityCard';
 import { formatKitchenStatus } from '../../../lib/labels';
-import { Clock, ChevronDown, ChevronUp, Play, CheckCircle2, BellRing, AlertTriangle, Undo2 } from 'lucide-react';
+import { Clock, Play, CheckCircle2, BellRing, Undo2, ShoppingBag } from 'lucide-react';
 import styles from './OrderTicketCard.module.css';
 
 export function OrderTicketCard({ order, onAdvanceStatus, onCancelOrder }) {
   const { user } = useAuth();
-  const [isExpanded, setIsExpanded] = useState(false);
+  const { profile } = useBusinessProfile();
   const [elapsedText, setElapsedText] = useState('');
   const [elapsedMins, setElapsedMins] = useState(0);
   const [elapsedSecsTotal, setElapsedSecsTotal] = useState(0);
@@ -41,7 +42,10 @@ export function OrderTicketCard({ order, onAdvanceStatus, onCancelOrder }) {
   const role = user?.role || 'WAITER';
   const status = order.kitchenStatus || 'PENDING';
   const isDelayed = (status === 'PENDING' || status === 'PREPARING') && elapsedMins >= 10;
-  const canUndo60s = elapsedSecsTotal <= 60 && status === 'PENDING' && (role === 'WAITER' || role === 'ADMIN');
+  
+  // cancellation window from profile settings or default 300s
+  const cancellationWindowSecs = profile?.orderCancellationWindowSeconds ?? 300;
+  const canUndo = elapsedSecsTotal <= cancellationWindowSecs && status === 'PENDING' && (role === 'WAITER' || role === 'ADMIN' || role === 'COUNTER');
 
   let actionButton = null;
 
@@ -102,7 +106,14 @@ export function OrderTicketCard({ order, onAdvanceStatus, onCancelOrder }) {
     }
   }
 
-  const totalItemCount = (order.items || []).reduce((sum, i) => sum + i.quantity, 0);
+  const isParcel = order.orderType === 'PARCEL' || !order.tableId;
+  const locationLabel = isParcel
+    ? '🛍️ PARCEL / TAKEAWAY'
+    : `Table ${order.table?.name || 'Table'}`;
+
+  const headlineTitle = order.dailyOrderNumber
+    ? `Order #${order.dailyOrderNumber}`
+    : locationLabel;
 
   const getBadgeVariant = (st) => {
     if (isDelayed) return 'danger';
@@ -116,48 +127,39 @@ export function OrderTicketCard({ order, onAdvanceStatus, onCancelOrder }) {
 
   return (
     <EntityCard
-      title={`${order.table?.name || 'Table'} Ticket`}
-      subtitle={`Staff: ${order.staff?.username || 'Staff'} • ${order.customer ? order.customer.name : 'Walk-in'}`}
+      title={headlineTitle}
+      subtitle={`${locationLabel} • ${order.staff?.username || 'Staff'}`}
       badgeText={isDelayed ? '⚠️ DELAYED (>10m)' : formatKitchenStatus(status)}
       badgeVariant={getBadgeVariant(status)}
-      onClick={() => setIsExpanded(!isExpanded)}
       footerLeft={
         <span style={{ fontSize: 'var(--text-xs)', color: isDelayed ? 'var(--color-danger)' : 'var(--color-text-secondary)', fontWeight: isDelayed ? 800 : 500, display: 'flex', alignItems: 'center', gap: '4px' }}>
           <Clock size={12} /> {elapsedText}
         </span>
       }
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-brand)' }}>
-        <span>{totalItemCount} Dish Line Item(s)</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '2px', cursor: 'pointer' }}>
-          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-        </span>
+      {/* Inline Dish Items List (always visible without needing tap) */}
+      <div className={styles.itemsList} style={{ marginTop: '4px' }}>
+        {order.items?.map((i) => (
+          <div key={i.id} className={styles.itemRow} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)', padding: '2px 0' }}>
+            <span><strong>{i.quantity}x</strong> {i.menuItem?.name || 'Dish'}</span>
+            <span style={{ fontWeight: 600, color: 'var(--color-text-secondary)' }}>₹{((i.priceSnapshot * i.quantity) / 100).toFixed(2)}</span>
+          </div>
+        ))}
       </div>
-
-      {isExpanded && order.items?.length > 0 && (
-        <div className={styles.itemsList}>
-          {order.items.map((i) => (
-            <div key={i.id} className={styles.itemRow}>
-              <span><strong>{i.quantity}x</strong> {i.menuItem?.name || 'Dish'}</span>
-              <span>₹{((i.priceSnapshot * i.quantity) / 100).toFixed(2)}</span>
-            </div>
-          ))}
-        </div>
-      )}
 
       {actionButton}
 
-      {/* 60s Undo Window for Just-Submitted Order */}
-      {canUndo60s && onCancelOrder && (
+      {/* Undo Order Window */}
+      {canUndo && onCancelOrder && (
         <button
           onClick={(e) => {
             e.stopPropagation();
-            if (confirm('Undo & cancel this just-submitted order?')) {
+            if (confirm('Undo & cancel this order?')) {
               onCancelOrder(order.id);
             }
           }}
           style={{
-            marginTop: '4px',
+            marginTop: '6px',
             background: 'none',
             border: 'none',
             color: 'var(--color-danger)',
@@ -171,7 +173,7 @@ export function OrderTicketCard({ order, onAdvanceStatus, onCancelOrder }) {
             justifyContent: 'center'
           }}
         >
-          <Undo2 size={12} /> Undo Order ({60 - elapsedSecsTotal}s left)
+          <Undo2 size={12} /> Undo Order ({cancellationWindowSecs - elapsedSecsTotal}s left)
         </button>
       )}
     </EntityCard>

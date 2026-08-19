@@ -1,15 +1,17 @@
 import { useState } from 'react';
 import { useOrdersBoard } from '../hooks/useOrdersBoard';
 import { useAuth } from '../../../hooks/useAuth';
+import { boardColumnConfig } from '../config/boardConfig';
 import { OrderTicketCard } from './OrderTicketCard';
 import { Button } from '../../../components/ui/Button/Button';
 import { KITCHEN_STATUS_COLUMN_TITLES, formatKitchenStatus } from '../../../lib/labels';
-import { ChefHat, RefreshCw, Volume2, VolumeX, Bell, Sunset, AlertTriangle } from 'lucide-react';
+import { ChefHat, RefreshCw, Volume2, VolumeX, Bell, Sunset, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
 import styles from './OrdersBoard.module.css';
 
 export function OrdersBoard() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
+  const role = user?.role || 'WAITER';
 
   const {
     orders,
@@ -23,6 +25,10 @@ export function OrdersBoard() {
     cancelOrder,
     closeDay
   } = useOrdersBoard();
+
+  // Step 9: Role-Based Board Priority (Kitchen collapses READY and SERVED by default)
+  const roleConfig = boardColumnConfig[role] || boardColumnConfig.WAITER;
+  const [expandedSecondaryCols, setExpandedSecondaryCols] = useState({});
 
   // Close Day Confirmation & Warning State
   const [unresolvedData, setUnresolvedData] = useState(null);
@@ -73,6 +79,13 @@ export function OrdersBoard() {
     }
   };
 
+  const toggleExpandSecondary = (status) => {
+    setExpandedSecondaryCols((prev) => ({
+      ...prev,
+      [status]: !prev[status]
+    }));
+  };
+
   return (
     <div className={styles.container}>
       {/* Toast Alert Banner */}
@@ -100,7 +113,7 @@ export function OrdersBoard() {
           <h2 className={styles.title} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <ChefHat size={22} color="var(--color-brand)" /> Live Orders Tracker
           </h2>
-          <p className={styles.subtitle}>Shared real-time order prep tracking across all café tables and stations</p>
+          <p className={styles.subtitle}>Shared real-time order prep tracking across all café tables and stations ({role} view)</p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
@@ -167,29 +180,64 @@ export function OrdersBoard() {
         <p style={{ color: 'var(--color-danger)' }}>{error}</p>
       ) : (
         <div className={styles.kanbanGrid}>
-          {columns.map((col) => (
-            <div key={col.status} className={styles.column}>
-              <div className={`${styles.columnHeader} ${col.headerClass}`}>
-                <span>{col.title}</span>
-                <span className={styles.badge}>{col.orders.length}</span>
-              </div>
+          {columns.map((col) => {
+            const isSecondary = roleConfig.secondary.includes(col.status);
+            const isExpanded = expandedSecondaryCols[col.status];
 
-              <div className={styles.cardsList}>
-                {col.orders.length === 0 ? (
-                  <div className={styles.emptyCol}>No active tickets in this column</div>
-                ) : (
-                  col.orders.map((ord) => (
-                    <OrderTicketCard
-                      key={ord.id}
-                      order={ord}
-                      onAdvanceStatus={advanceKitchenStatus}
-                      onCancelOrder={cancelOrder}
-                    />
-                  ))
-                )}
+            if (isSecondary && !isExpanded) {
+              return (
+                <div
+                  key={col.status}
+                  className={styles.column}
+                  style={{ cursor: 'pointer', backgroundColor: 'var(--color-bg-secondary)', opacity: 0.85 }}
+                  onClick={() => toggleExpandSecondary(col.status)}
+                  title="Tap to expand finished column"
+                >
+                  <div className={`${styles.columnHeader} ${col.headerClass}`} style={{ borderBottom: 'none' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <ChevronRight size={16} />
+                      <span>{col.title}</span>
+                    </div>
+                    <span className={styles.badge}>{col.orders.length}</span>
+                  </div>
+                  <div style={{ padding: '8px 12px', fontSize: '11px', color: 'var(--color-text-secondary)', fontStyle: 'italic', textAlign: 'center' }}>
+                    Tap to expand ({col.orders.length} completed)
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div key={col.status} className={styles.column}>
+                <div
+                  className={`${styles.columnHeader} ${col.headerClass}`}
+                  onClick={isSecondary ? () => toggleExpandSecondary(col.status) : undefined}
+                  style={{ cursor: isSecondary ? 'pointer' : 'default' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {isSecondary && <ChevronDown size={16} />}
+                    <span>{col.title}</span>
+                  </div>
+                  <span className={styles.badge}>{col.orders.length}</span>
+                </div>
+
+                <div className={styles.cardsList}>
+                  {col.orders.length === 0 ? (
+                    <div className={styles.emptyCol}>No active tickets in this column</div>
+                  ) : (
+                    col.orders.map((ord) => (
+                      <OrderTicketCard
+                        key={ord.id}
+                        order={ord}
+                        onAdvanceStatus={advanceKitchenStatus}
+                        onCancelOrder={cancelOrder}
+                      />
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

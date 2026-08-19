@@ -1,9 +1,13 @@
-// Cafe Woody's — Receipt Formatter for Thermal Printing (Dynamic Roll Width & UPI QR)
+// Cafe Woody's — Receipt Formatter for Thermal Printing (Free-Form Roll Width & Override)
+import { formatInvoiceNumber } from '../invoiceFormat';
 
-const CHAR_WIDTH = {
-  MM_58: 32,
-  MM_80: 48
-};
+export function getCharsPerLine(profile = {}) {
+  if (profile.thermalCharsPerLineOverride && Number(profile.thermalCharsPerLineOverride) > 0) {
+    return Number(profile.thermalCharsPerLineOverride);
+  }
+  const widthMm = Number(profile.thermalPaperWidthMm) || (profile.thermalPaperWidth === 'MM_58' ? 58 : 80);
+  return Math.max(16, Math.floor(widthMm * 0.6));
+}
 
 function centerText(str, width) {
   if (!str) return '';
@@ -23,8 +27,7 @@ export function buildUpiUri({ upiId, payeeName, amountPaise, note }) {
 export function formatReceipt(bill, profile = {}) {
   if (!bill) return '';
 
-  const paperWidthKey = profile.thermalPaperWidth || 'MM_80';
-  const width = CHAR_WIDTH[paperWidthKey] || CHAR_WIDTH.MM_80;
+  const width = getCharsPerLine(profile);
 
   const dateStr = new Date(bill.createdAt || Date.now()).toLocaleString('en-IN', {
     dateStyle: 'medium',
@@ -32,7 +35,7 @@ export function formatReceipt(bill, profile = {}) {
   });
 
   const invoiceNo = typeof bill.invoiceNumber === 'number'
-    ? `Invoice #${bill.invoiceNumber} (${bill.financialYear || ''})`
+    ? formatInvoiceNumber(bill.invoiceNumber, bill.financialYear)
     : (bill.invoiceNumber || `Bill #${bill.id.slice(-6).toUpperCase()}`);
 
   const lines = [];
@@ -50,20 +53,21 @@ export function formatReceipt(bill, profile = {}) {
   lines.push(dividerDouble);
   lines.push(`Date: ${dateStr}`);
   lines.push(`${invoiceNo}`);
-  lines.push(`Table: ${bill.table?.name || 'Table'} (${bill.table?.zone?.name || 'Zone'})`);
+  lines.push(`Table: ${bill.table?.name || (bill.orderType === 'PARCEL' ? 'Parcel / Takeaway' : 'Table')} (${bill.table?.zone?.name || 'Zone'})`);
   if (bill.customer) {
     lines.push(`Customer: ${bill.customer.name} (${bill.customer.phone})`);
   }
   lines.push(dividerSingle);
 
-  // Column Header Allocation based on Roll Width
-  if (width === 32) {
-    // 58mm: ITEM(16) QTY(3) PRICE(11)
-    lines.push('ITEM             QTY      PRICE');
-  } else {
-    // 80mm: ITEM(28) QTY(5) PRICE(13)
-    lines.push('ITEM                         QTY         PRICE');
-  }
+  // Dynamic Column Header Allocation based on chars per line
+  const qtyColWidth = 4;
+  const priceColWidth = 10;
+  const nameColWidth = Math.max(10, width - qtyColWidth - priceColWidth - 2);
+
+  const headerName = 'ITEM'.padEnd(nameColWidth).slice(0, nameColWidth);
+  const headerQty = 'QTY'.padStart(qtyColWidth);
+  const headerPrice = 'PRICE'.padStart(priceColWidth);
+  lines.push(`${headerName} ${headerQty} ${headerPrice}`);
   lines.push(dividerSingle);
 
   // 1. Food Orders Line Items
@@ -71,17 +75,10 @@ export function formatReceipt(bill, profile = {}) {
     bill.orders.forEach((ord) => {
       ord.items?.forEach((i) => {
         const itemPrice = ((i.priceSnapshot * i.quantity) / 100).toFixed(2);
-        if (width === 32) {
-          const name = (i.menuItem?.name || 'Item').padEnd(16).slice(0, 16);
-          const qty = String(i.quantity).padStart(3);
-          const amt = `₹${itemPrice}`.padStart(11);
-          lines.push(`${name} ${qty} ${amt}`);
-        } else {
-          const name = (i.menuItem?.name || 'Item').padEnd(28).slice(0, 28);
-          const qty = String(i.quantity).padStart(5);
-          const amt = `₹${itemPrice}`.padStart(13);
-          lines.push(`${name} ${qty} ${amt}`);
-        }
+        const name = (i.menuItem?.name || 'Item').padEnd(nameColWidth).slice(0, nameColWidth);
+        const qty = String(i.quantity).padStart(qtyColWidth);
+        const amt = `₹${itemPrice}`.padStart(priceColWidth);
+        lines.push(`${name} ${qty} ${amt}`);
       });
     });
   }
@@ -90,15 +87,9 @@ export function formatReceipt(bill, profile = {}) {
   if (bill.gamingSessions?.length > 0) {
     bill.gamingSessions.forEach((s) => {
       const chargeStr = `₹${((s.hourlyRateSnapshot || 0) / 100).toFixed(2)}`;
-      if (width === 32) {
-        const name = `Play: ${s.playerLabel || 'Player'}`.padEnd(16).slice(0, 16);
-        const amt = chargeStr.padStart(15);
-        lines.push(`${name} ${amt}`);
-      } else {
-        const name = `Gaming: ${s.playerLabel || 'Player'}`.padEnd(28).slice(0, 28);
-        const amt = chargeStr.padStart(19);
-        lines.push(`${name} ${amt}`);
-      }
+      const name = `Play: ${s.playerLabel || 'Player'}`.padEnd(nameColWidth).slice(0, nameColWidth);
+      const amt = chargeStr.padStart(priceColWidth + qtyColWidth + 1);
+      lines.push(`${name} ${amt}`);
     });
   }
 
@@ -107,8 +98,8 @@ export function formatReceipt(bill, profile = {}) {
   // Totals Breakdown
   const fmtRow = (label, amountVal) => {
     const valStr = `₹${(amountVal / 100).toFixed(2)}`;
-    const labelLen = width - valStr.length;
-    return label.padEnd(labelLen) + valStr;
+    const labelLen = Math.max(1, width - valStr.length);
+    return label.padEnd(labelLen).slice(0, labelLen) + valStr;
   };
 
   lines.push(fmtRow('Food Subtotal:', bill.foodTotal || 0));
@@ -126,7 +117,7 @@ export function formatReceipt(bill, profile = {}) {
   lines.push(fmtRow('Balance Due:', bill.remainingBalance || 0));
   lines.push(dividerDouble);
 
-  // Embedded UPI Payment Deep Link (for ESC/POS QR printing)
+  // Embedded UPI Payment Deep Link
   if (profile.upiId && (bill.remainingBalance || bill.grandTotal) > 0) {
     const amountToPay = bill.remainingBalance > 0 ? bill.remainingBalance : bill.grandTotal;
     const upiUri = buildUpiUri({
@@ -142,7 +133,7 @@ export function formatReceipt(bill, profile = {}) {
 
   lines.push(centerText(profile.receiptFooterNote || 'Thank you for visiting Woody\'s!', width));
   lines.push(centerText('Please Come Again!', width));
-  lines.push('\n\n\n'); // Feed spacing for paper tear
+  lines.push('\n\n\n');
 
   return lines.join('\n');
 }

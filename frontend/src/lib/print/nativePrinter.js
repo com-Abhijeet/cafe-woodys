@@ -1,11 +1,25 @@
 // Cafe Woody's — Native ESC/POS Capacitor Thermal Printer Interface
+import { Capacitor } from '@capacitor/core';
 
 export async function printNative(formattedText, printerIpAddress) {
   const ip = printerIpAddress || '192.168.1.100'; // Default printer IP if unset
 
   try {
-    // Dynamically import Capacitor plugin if installed inside Android shell
-    const { ThermalPrinter } = await import('thermal-printer-ionic');
+    let ThermalPrinter = window?.ThermalPrinter || window?.Capacitor?.Plugins?.ThermalPrinter;
+
+    if (!ThermalPrinter && Capacitor.isNativePlatform()) {
+      try {
+        const pkgName = 'thermal-printer-ionic';
+        const plugin = await import(/* @vite-ignore */ pkgName);
+        ThermalPrinter = plugin?.ThermalPrinter || window?.ThermalPrinter;
+      } catch (e) {
+        ThermalPrinter = window?.ThermalPrinter;
+      }
+    }
+
+    if (!ThermalPrinter) {
+      return { success: false, error: 'Thermal printer ionic plugin not available on this platform' };
+    }
 
     // 6-Second Timeout Safeguard so unreachable printers never hang the checkout screen
     const printPromise = new Promise((resolve, reject) => {

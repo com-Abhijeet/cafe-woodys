@@ -36,6 +36,11 @@ enum GamingSessionStatus {
   CLOSED
 }
 
+enum OrderType {
+  DINE_IN
+  PARCEL
+}
+
 enum OrderStatus {
   OPEN
   BILLED
@@ -106,11 +111,6 @@ enum DiscountScope {
   CAFE_ONLY   // food/drink total only
   GAMING_ONLY // gaming charge only
   ZONE        // a specific Zone, see DiscountRule.zoneId
-}
-
-enum ThermalPaperWidth {
-  MM_58 // ~32 characters/line at standard font — confirm against the actual printer's spec, this is a common default not a guarantee
-  MM_80 // ~48 characters/line at standard font
 }
 
 // ─────────────────────────────────────────────
@@ -350,8 +350,10 @@ model SmsLog {
 
 model Order {
   id         String      @id @default(uuid())
-  tableId    String
-  table      Table       @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  tableId    String?     // null for PARCEL orders — see orderType
+  table      Table?      @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  orderType  OrderType   @default(DINE_IN)
+  dailyOrderNumber Int   @default(1) // resets to 1 after "Close Day" (Phase 13) — see generation logic below, NOT the same as Bill.invoiceNumber
   customerId String?
   customer   Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
   staffId    String
@@ -370,6 +372,7 @@ model Order {
   @@index([status])
   @@index([kitchenStatus])
   @@index([boardClearedAt])
+  @@index([orderType])
 }
 
 model OrderItem {
@@ -390,8 +393,9 @@ model Bill {
   id              String        @id @default(uuid())
   invoiceNumber   Int           // plain sequential 1, 2, 3... resets to 1 every financial year (see financialYear) — NOT globally unique alone, see @@unique below
   financialYear   String        // e.g. "2025-26" — Indian financial year (1 Apr - 31 Mar), computed in billing.service.mjs at bill creation
-  tableId         String
-  table           Table         @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  tableId         String?       // null for PARCEL bills — see orderType
+  table           Table?        @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  orderType       OrderType     @default(DINE_IN) // mirrors the linked Order(s)' type — kept explicit here rather than derived via join, since it's read on nearly every bill list/receipt render
   customerId      String?
   customer        Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
   staffId         String
@@ -472,9 +476,11 @@ model BusinessProfile {
   receiptFooterNote String?  // e.g. "Thank you for visiting Cafe Woody's!"
   defaultGstPercent Decimal  @default(5) // fallback total GST % (CGST+SGST combined) used only when a MenuItem or Zone doesn't specify its own rate — NOT the rate for everything. See MenuItem.gstPercent / Zone.gstPercent.
   gamingGracePeriodMinutes Int @default(5) // forgiveness window applied at each 30-min slab boundary when closing a gaming session — see Phase 12
+  orderCancellationWindowSeconds Int @default(300) // how long after submission staff can void a just-placed order before it's treated as final — see Phase 9 Step 7 / Phase 18
   printerIpAddress String? // WiFi thermal printer's local IP, e.g. "192.168.1.123" — set from the counter app's Settings screen, read by the native print plugin. Phase 14.
   pricesIncludeTax Boolean @default(false) // global, not per-item — if true, MenuItem.price/gaming rates are treated as tax-inclusive and GST is extracted from within the price rather than added on top. See Phase 16.
-  thermalPaperWidth ThermalPaperWidth @default(MM_80) // drives receipt character width/wrapping. See Phase 16.
+  thermalPaperWidthMm Int @default(80) // free-form roll width in mm, not a fixed preset — any value the client's printer actually uses. See Phase 18.
+  thermalCharsPerLineOverride Int? // manual override for character-width-per-line if the auto formula (~0.6 chars/mm) doesn't match the printer's actual font/spacing — null means use the auto formula
   upiId String? // e.g. "cafewoodys@okicici" — used to generate amount-embedded UPI QR codes on bills
   upiPayeeName String? // display name shown in the customer's UPI app during payment
   autoMarkBillsPaidInFull Boolean @default(false) // if true, billing defaults to instantly recording full payment — overridable per bill. See Phase 16.

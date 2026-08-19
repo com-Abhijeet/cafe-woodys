@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useBilling } from '../hooks/useBilling';
 import { exportFileApi } from '../../../lib/apiClient';
+import { formatInvoiceNumber } from '../../../lib/invoiceFormat';
 import { FilterBar } from '../../../components/ui/FilterBar';
 import { ListRow } from '../../../components/ui/ListRow';
 import { BillDetailModal } from './BillDetailModal';
@@ -147,7 +148,7 @@ export function BillsHistoryManager() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {bills.map((bill) => {
             const shortId = typeof bill.invoiceNumber === 'number'
-              ? `Invoice #${bill.invoiceNumber} (${bill.financialYear || ''})`
+              ? formatInvoiceNumber(bill.invoiceNumber, bill.financialYear)
               : `#${bill.id.slice(-6).toUpperCase()}`;
             const custText = bill.customer ? `${bill.customer.name} (${bill.customer.phone})` : 'Walk-in Customer';
 
@@ -155,7 +156,7 @@ export function BillsHistoryManager() {
               <ListRow
                 key={bill.id}
                 title={shortId}
-                subtitle={`${bill.table?.name || 'Table'} • ${custText}`}
+                subtitle={`${bill.table?.name || (bill.orderType === 'PARCEL' ? 'Parcel / Takeaway' : 'Table')} • ${custText}`}
                 badgeText={getBadgeText(bill)}
                 badgeVariant={getBadgeVariant(bill)}
                 onClick={() => handleOpenDetail(bill)}
