@@ -1,5 +1,5 @@
 import { orderService } from './order.service.mjs';
-import { createOrderSchema, updateKitchenStatusSchema } from './order.validation.mjs';
+import { createOrderSchema, updateKitchenStatusSchema, voidOrderItemSchema } from './order.validation.mjs';
 import { ValidationError } from '../../shared/errors/validation-error.mjs';
 
 export const orderController = {
@@ -19,6 +19,21 @@ export const orderController = {
       const { kitchenStatus, tableId, orderType, status, sort } = req.query;
       const orders = await orderService.listOrders({ kitchenStatus, tableId, orderType, status, sort });
       return res.json({ data: orders });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async voidOrderItem(req, res, next) {
+    try {
+      const { id } = req.params;
+      const parseResult = voidOrderItemSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        throw new ValidationError('Invalid void item input', 'VALIDATION_ERROR', parseResult.error.flatten().fieldErrors);
+      }
+
+      const updatedOrder = await orderService.voidOrderItem(id, req.user.id, parseResult.data);
+      return res.json({ data: updatedOrder });
     } catch (err) {
       next(err);
     }

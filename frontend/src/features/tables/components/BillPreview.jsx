@@ -45,6 +45,8 @@ export function BillPreview({ table, onBackToOrdering, onRefreshTable }) {
           setActionError(err.message || 'Failed to load bill preview');
           setIsPreviewLoading(false);
         });
+    } else if (!committedBill && !table?.id) {
+      setIsPreviewLoading(false);
     }
   }, [committedBill, table?.id]);
 

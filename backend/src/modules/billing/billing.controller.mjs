@@ -1,5 +1,5 @@
 import { billingService } from './billing.service.mjs';
-import { generateBillSchema, addPaymentSchema } from './billing.validation.mjs';
+import { generateBillSchema, addPaymentSchema, voidBillSchema, recordRefundSchema } from './billing.validation.mjs';
 import { ValidationError } from '../../shared/errors/validation-error.mjs';
 
 export const billingController = {
@@ -118,10 +118,28 @@ export const billingController = {
   async voidBill(req, res, next) {
     try {
       const { id } = req.params;
-      const { reason } = req.body || {};
-      const staffId = req.user.id;
-      const voided = await billingService.voidBill(id, staffId, { reason });
+      const parseResult = voidBillSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        throw new ValidationError('Invalid void bill input', 'VALIDATION_ERROR', parseResult.error.flatten().fieldErrors);
+      }
+
+      const voided = await billingService.voidBill(id, req.user, parseResult.data);
       return res.json({ data: voided });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async recordRefund(req, res, next) {
+    try {
+      const { id } = req.params;
+      const parseResult = recordRefundSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        throw new ValidationError('Invalid refund input', 'VALIDATION_ERROR', parseResult.error.flatten().fieldErrors);
+      }
+
+      const updatedBill = await billingService.recordRefund(id, req.user, parseResult.data);
+      return res.json({ data: updatedBill });
     } catch (err) {
       next(err);
     }

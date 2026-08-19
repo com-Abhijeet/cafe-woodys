@@ -7,6 +7,6 @@ export async function fetchBusinessProfileApi() {
 export async function updateBusinessProfileApi(payload) {
   return apiClient('/business-profile', {
     method: 'PATCH',
-    body: JSON.stringify(payload)
+    body: payload
   });
 }

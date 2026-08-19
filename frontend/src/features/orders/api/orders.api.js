@@ -21,3 +21,10 @@ export async function submitParcelOrderApi(items, customerId = null) {
     }
   });
 }
+
+export async function voidOrderItemApi(orderItemId, reason) {
+  return apiClient(`/order-items/${orderItemId}/void`, {
+    method: 'PATCH',
+    body: { reason }
+  });
+}

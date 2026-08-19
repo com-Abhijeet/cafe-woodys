@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { OrderCart } from './OrderCart';
 import { SubmittedOrdersList } from './SubmittedOrdersList';
 import { ShoppingCart, Utensils, ChevronRight } from 'lucide-react';
-import styles from './TableWorkspaceModal.module.css';
 
 export function OrderTabs({
   cart,
@@ -10,7 +9,8 @@ export function OrderTabs({
   onSubmitOrder,
   isSubmitting,
   orders,
-  unbilledFoodTotal
+  unbilledFoodTotal,
+  onRefreshOrders
 }) {
   const [activeOrderTab, setActiveOrderTab] = useState('CART');
 
@@ -85,7 +85,7 @@ export function OrderTabs({
             fontSize: '11px',
             color: 'var(--color-text-secondary)',
             display: 'flex',
-            justify: 'space-between',
+            justifyContent: 'space-between',
             alignItems: 'center',
             cursor: 'pointer',
             flexShrink: 0
@@ -106,7 +106,7 @@ export function OrderTabs({
             fontSize: '11px',
             color: 'var(--color-text-secondary)',
             display: 'flex',
-            justify: 'space-between',
+            justifyContent: 'space-between',
             alignItems: 'center',
             cursor: 'pointer',
             flexShrink: 0
@@ -132,6 +132,7 @@ export function OrderTabs({
           <SubmittedOrdersList
             orders={orders}
             unbilledFoodTotal={unbilledFoodTotal}
+            onRefreshOrders={onRefreshOrders}
           />
         )}
       </div>

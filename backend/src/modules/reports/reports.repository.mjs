@@ -2,7 +2,9 @@ import prisma from '../../shared/db/client.mjs';
 
 export const reportsRepository = {
   async getSalesSummary({ dateFrom, dateTo, groupBy = 'day' }) {
-    const where = {};
+    const where = {
+      voidedAt: null // Phase 19 Step 5: Exclude voided bills from revenue calculations
+    };
     if (dateFrom || dateTo) {
       where.createdAt = {};
       if (dateFrom) where.createdAt.gte = new Date(dateFrom);
@@ -23,6 +25,28 @@ export const reportsRepository = {
       },
       orderBy: { createdAt: 'asc' }
     });
+
+    // Count voided bills and total refunds for admin audit
+    const voidWhere = { voidedAt: { not: null } };
+    const refundWhere = {};
+    if (dateFrom || dateTo) {
+      voidWhere.createdAt = {};
+      refundWhere.createdAt = {};
+      if (dateFrom) {
+        voidWhere.createdAt.gte = new Date(dateFrom);
+        refundWhere.createdAt.gte = new Date(dateFrom);
+      }
+      if (dateTo) {
+        const endDate = new Date(dateTo);
+        endDate.setHours(23, 59, 59, 999);
+        voidWhere.createdAt.lte = endDate;
+        refundWhere.createdAt.lte = endDate;
+      }
+    }
+
+    const voidedBillsCount = await prisma.bill.count({ where: voidWhere });
+    const refunds = await prisma.refund.findMany({ where: refundWhere, select: { amount: true } });
+    const totalRefundsAmount = refunds.reduce((sum, r) => sum + r.amount, 0);
 
     const bucketsMap = new Map();
 
@@ -79,7 +103,9 @@ export const reportsRepository = {
       summary,
       totalOrders,
       dineInOrders,
-      parcelOrders
+      parcelOrders,
+      voidedBillsCount,
+      totalRefundsAmount
     };
   },
 
@@ -98,7 +124,7 @@ export const reportsRepository = {
     whereOrder.status = { not: 'CANCELLED' };
 
     const orderItems = await prisma.orderItem.findMany({
-      where: { order: whereOrder },
+      where: { order: whereOrder, voidedAt: null },
       include: {
         menuItem: { select: { id: true, name: true, category: true, price: true } }
       }
@@ -128,7 +154,7 @@ export const reportsRepository = {
   },
 
   async getZonePerformance({ dateFrom, dateTo }) {
-    const where = {};
+    const where = { voidedAt: null };
     if (dateFrom || dateTo) {
       where.createdAt = {};
       if (dateFrom) where.createdAt.gte = new Date(dateFrom);
@@ -169,7 +195,7 @@ export const reportsRepository = {
   },
 
   async getStaffPerformance({ dateFrom, dateTo }) {
-    const whereBill = {};
+    const whereBill = { voidedAt: null };
     if (dateFrom || dateTo) {
       whereBill.createdAt = {};
       if (dateFrom) whereBill.createdAt.gte = new Date(dateFrom);
@@ -207,7 +233,7 @@ export const reportsRepository = {
   },
 
   async getPaymentMethodsBreakdown({ dateFrom, dateTo }) {
-    const wherePay = {};
+    const wherePay = { bill: { voidedAt: null } };
     if (dateFrom || dateTo) {
       wherePay.paidAt = {};
       if (dateFrom) wherePay.paidAt.gte = new Date(dateFrom);

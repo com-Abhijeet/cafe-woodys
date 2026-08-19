@@ -1,5 +1,6 @@
 import prisma from '../../shared/db/client.mjs';
 import { ConflictError } from '../../shared/errors/conflict-error.mjs';
+import { NotFoundError } from '../../shared/errors/not-found-error.mjs';
 
 async function getNextDailyOrderNumber(tx) {
   const lastOrder = await tx.order.findFirst({
@@ -22,7 +23,7 @@ export const orderRepository = {
         },
         customer: true,
         items: {
-          include: { menuItem: true }
+          include: { menuItem: true, voidedByStaff: { select: { id: true, username: true } } }
         }
       },
       orderBy: { createdAt: 'desc' }
@@ -36,8 +37,79 @@ export const orderRepository = {
         table: { select: { id: true, name: true, zoneId: true } },
         staff: { select: { id: true, username: true } },
         customer: { select: { id: true, name: true, phone: true } },
-        items: { include: { menuItem: true } }
+        items: {
+          include: { menuItem: true, voidedByStaff: { select: { id: true, username: true } } }
+        }
       }
+    });
+  },
+
+  async findOrderItemById(orderItemId) {
+    return prisma.orderItem.findUnique({
+      where: { id: orderItemId },
+      include: {
+        order: {
+          include: {
+            table: { select: { id: true, name: true } }
+          }
+        },
+        menuItem: true
+      }
+    });
+  },
+
+  async voidOrderItemWithTransaction(orderItemId, staffId, reason) {
+    return prisma.$transaction(async (tx) => {
+      const item = await tx.orderItem.findUnique({
+        where: { id: orderItemId },
+        include: { order: true }
+      });
+
+      if (!item) {
+        throw new NotFoundError('Order item not found', 'ORDER_ITEM_NOT_FOUND');
+      }
+
+      if (item.voidedAt) {
+        throw new ConflictError('Order item is already voided', 'ITEM_ALREADY_VOIDED');
+      }
+
+      if (item.order.kitchenStatus !== 'PENDING') {
+        throw new ConflictError('Cannot void item after kitchen preparation has started', 'KITCHEN_PREP_STARTED');
+      }
+
+      // Restore recipe ingredient stock
+      const ingredients = await tx.recipeIngredient.findMany({
+        where: { menuItemId: item.menuItemId }
+      });
+
+      for (const ing of ingredients) {
+        const qtyToRestore = Number(ing.quantity) * item.quantity;
+        await tx.inventoryItem.update({
+          where: { id: ing.inventoryItemId },
+          data: { stockQuantity: { increment: qtyToRestore } }
+        });
+      }
+
+      // Mark order item as voided
+      await tx.orderItem.update({
+        where: { id: orderItemId },
+        data: {
+          voidedAt: new Date(),
+          voidReason: reason.trim(),
+          voidedByStaffId: staffId
+        }
+      });
+
+      // Fetch refreshed full order
+      return tx.order.findUnique({
+        where: { id: item.orderId },
+        include: {
+          table: { select: { id: true, name: true } },
+          staff: { select: { id: true, username: true } },
+          customer: { select: { id: true, name: true, phone: true } },
+          items: { include: { menuItem: true, voidedByStaff: { select: { id: true, username: true } } } }
+        }
+      });
     });
   },
 
@@ -69,7 +141,7 @@ export const orderRepository = {
         table: { select: { id: true, name: true } },
         staff: { select: { id: true, username: true } },
         customer: { select: { id: true, name: true, phone: true } },
-        items: { include: { menuItem: true } }
+        items: { include: { menuItem: true, voidedByStaff: { select: { id: true, username: true } } } }
       },
       orderBy
     });
@@ -86,7 +158,7 @@ export const orderRepository = {
       },
       include: {
         table: { select: { id: true, name: true } },
-        items: { select: { id: true, quantity: true } }
+        items: { select: { id: true, quantity: true, voidedAt: true } }
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -109,7 +181,7 @@ export const orderRepository = {
         table: { select: { id: true, name: true } },
         staff: { select: { id: true, username: true } },
         customer: { select: { id: true, name: true, phone: true } },
-        items: { include: { menuItem: true } }
+        items: { include: { menuItem: true, voidedByStaff: { select: { id: true, username: true } } } }
       }
     });
   },
@@ -123,18 +195,20 @@ export const orderRepository = {
 
       if (!order) throw new Error('Order not found');
 
-      // 1. Restore recipe inventory stock
+      // 1. Restore recipe inventory stock for non-voided items
       for (const item of order.items) {
-        const ingredients = await tx.recipeIngredient.findMany({
-          where: { menuItemId: item.menuItemId }
-        });
-
-        for (const ing of ingredients) {
-          const qtyToRestore = Number(ing.quantity) * item.quantity;
-          await tx.inventoryItem.update({
-            where: { id: ing.inventoryItemId },
-            data: { stockQuantity: { increment: qtyToRestore } }
+        if (!item.voidedAt) {
+          const ingredients = await tx.recipeIngredient.findMany({
+            where: { menuItemId: item.menuItemId }
           });
+
+          for (const ing of ingredients) {
+            const qtyToRestore = Number(ing.quantity) * item.quantity;
+            await tx.inventoryItem.update({
+              where: { id: ing.inventoryItemId },
+              data: { stockQuantity: { increment: qtyToRestore } }
+            });
+          }
         }
       }
 
@@ -145,7 +219,7 @@ export const orderRepository = {
         include: {
           table: { select: { id: true, name: true } },
           staff: { select: { id: true, username: true } },
-          items: { include: { menuItem: true } }
+          items: { include: { menuItem: true, voidedByStaff: { select: { id: true, username: true } } } }
         }
       });
     });

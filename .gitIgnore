@@ -8,3 +8,18 @@ Phase7_features.md
 Phase8_feature_guide.md
 Cafe_Woodys_Project_Scope_and_Payment_Terms.docx
 Phase_18_Features_Guide.md
+
+# Dependencies & Node Modules
+node_modules/
+**/node_modules/
+
+# Build & Output Artifacts
+dist/
+**/dist/
+build/
+**/build/
+*.apk
+
+# Environment & Logs
+.env
+*.log

@@ -13,6 +13,10 @@ router.post('/orders/close-day', requireRole(['ADMIN']), orderController.closeDa
 router.patch('/orders/:id/kitchen-status', orderController.updateKitchenStatus);
 router.patch('/orders/:id/cancel', orderController.cancelOrder);
 
+// Phase 19 Step 1: Item-level line item voiding (gated to WAITER, COUNTER, ADMIN)
+router.patch('/order-items/:id/void', requireRole(['WAITER', 'COUNTER', 'ADMIN']), orderController.voidOrderItem);
+router.patch('/orders/items/:id/void', requireRole(['WAITER', 'COUNTER', 'ADMIN']), orderController.voidOrderItem);
+
 // Table-specific order routes
 router.get('/tables/:tableId/orders', orderController.getTableOrders);
 router.post('/tables/:tableId/orders', orderController.createTableOrder);

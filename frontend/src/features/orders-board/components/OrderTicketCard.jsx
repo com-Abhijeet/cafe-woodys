@@ -139,7 +139,7 @@ export function OrderTicketCard({ order, onAdvanceStatus, onCancelOrder }) {
     >
       {/* Inline Dish Items List (always visible without needing tap) */}
       <div className={styles.itemsList} style={{ marginTop: '4px' }}>
-        {order.items?.map((i) => (
+        {order.items?.filter((i) => !i.voidedAt).map((i) => (
           <div key={i.id} className={styles.itemRow} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)', padding: '2px 0' }}>
             <span><strong>{i.quantity}x</strong> {i.menuItem?.name || 'Dish'}</span>
             <span style={{ fontWeight: 600, color: 'var(--color-text-secondary)' }}>₹{((i.priceSnapshot * i.quantity) / 100).toFixed(2)}</span>

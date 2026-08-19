@@ -4,7 +4,8 @@
   "description": "Café Woody's PC Thermal Print Connector Companion App",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "build": "npx @electron/packager . \"Cafe Woodys Print Connector\" --platform=win32 --arch=x64 --out=dist --overwrite"
   },
   "keywords": [
     "pos",

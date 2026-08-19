@@ -1,4 +1,4 @@
-export const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+export const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5050/api';
 
 export async function apiClient(endpoint, { body, headers: customHeaders, ...customConfig } = {}) {
   const token = localStorage.getItem('cafe_woodys_token');
@@ -15,8 +15,8 @@ export async function apiClient(endpoint, { body, headers: customHeaders, ...cus
     headers
   };
 
-  if (body) {
-    config.body = JSON.stringify(body);
+  if (body !== undefined) {
+    config.body = typeof body === 'string' ? body : JSON.stringify(body);
   }
 
   try {

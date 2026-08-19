@@ -13,3 +13,7 @@ export const createOrderSchema = z.object({
 export const updateKitchenStatusSchema = z.object({
   kitchenStatus: z.enum(['PENDING', 'PREPARING', 'READY', 'SERVED'])
 });
+
+export const voidOrderItemSchema = z.object({
+  reason: z.string().min(1, 'Reason for voiding item is mandatory')
+});

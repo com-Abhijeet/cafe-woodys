@@ -73,7 +73,7 @@ export function ParcelWorkspaceModal({ onClose, onRefreshTable }) {
   };
 
   const parcelTableData = {
-    id: null,
+    id: submittedParcelOrder ? submittedParcelOrder.id : null,
     name: submittedParcelOrder ? `Order #${submittedParcelOrder.dailyOrderNumber}` : 'New Takeaway',
     zone: { name: 'PARCEL / TAKEAWAY' },
     orderType: 'PARCEL'

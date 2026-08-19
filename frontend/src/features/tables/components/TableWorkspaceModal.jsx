@@ -20,7 +20,7 @@ export function TableWorkspaceModal({ table, onClose, onRefreshTable }) {
   const [activeModalTab, setActiveModalTab] = useState('ORDER');
 
   const { items: menuItems, isLoading: isMenuLoading } = useMenu();
-  const { orders, unbilledFoodTotal, submitOrder } = useOrders(table.id);
+  const { orders, unbilledFoodTotal, submitOrder, refreshOrders } = useOrders(table.id);
 
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [cart, setCart] = useState([]);
@@ -185,6 +185,7 @@ export function TableWorkspaceModal({ table, onClose, onRefreshTable }) {
                   isSubmitting={isSubmitting}
                   orders={orders}
                   unbilledFoodTotal={unbilledFoodTotal}
+                  onRefreshOrders={refreshOrders}
                 />
               </div>
             </div>

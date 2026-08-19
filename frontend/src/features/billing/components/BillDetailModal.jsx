@@ -4,17 +4,19 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useBusinessProfile } from '../../settings/hooks/useBusinessProfile';
 import { printBillViaRawBT } from '../../../lib/rawbtPrinter';
 import { formatInvoiceNumber } from '../../../lib/invoiceFormat';
+import { recordRefundApi, fetchBillApi } from '../api/billing.api';
 import { UpiQrCode } from './UpiQrCode';
 import { Input } from '../../../components/ui/Input/Input';
 import { Button } from '../../../components/ui/Button/Button';
-import { X, Receipt, Printer, CheckCircle2, Clock, Plus, CreditCard, User, AlertOctagon, Ban } from 'lucide-react';
+import { X, Receipt, Printer, CreditCard, User, AlertOctagon, Ban, ArrowRightLeft, RefreshCw, RotateCcw } from 'lucide-react';
 import styles from './CheckoutModal.module.css';
 
 export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
   const { user } = useAuth();
   const { currentBill, submitPayment, voidBill } = useBilling();
   const { profile } = useBusinessProfile();
-  const activeBill = currentBill || initialBill;
+  const [inspectedBill, setInspectedBill] = useState(null);
+  const activeBill = inspectedBill || currentBill || initialBill;
 
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [payAmountRs, setPayAmountRs] = useState(
@@ -28,14 +30,38 @@ export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
   const [showVoidModal, setShowVoidModal] = useState(false);
   const [voidReason, setVoidReason] = useState('');
 
+  // Refund State
+  const [showRefundForm, setShowRefundForm] = useState(false);
+  const [refundAmountRs, setRefundAmountRs] = useState('');
+  const [refundReason, setRefundReason] = useState('');
+  const [refundMethod, setRefundMethod] = useState('CASH');
+
   if (!activeBill) return null;
 
-  const isAdmin = user?.role === 'ADMIN';
+  const role = user?.role || 'WAITER';
+  const isAdmin = role === 'ADMIN';
   const isVoided = !!activeBill.voidedAt;
   const isPaid = activeBill.paymentStatus === 'PAID';
+  const isPaidOrPartial = activeBill.paymentStatus === 'PAID' || activeBill.paymentStatus === 'PARTIALLY_PAID';
+
+  // Step 4 Permission Matrix: Unpaid = COUNTER / ADMIN, Paid = ADMIN ONLY
+  const canVoidBill = !isVoided && (isPaidOrPartial ? role === 'ADMIN' : (role === 'COUNTER' || role === 'ADMIN'));
+
   const invoiceTitle = typeof activeBill.invoiceNumber === 'number'
     ? formatInvoiceNumber(activeBill.invoiceNumber, activeBill.financialYear)
     : (activeBill.invoiceNumber || `Bill #${activeBill.id.slice(-6).toUpperCase()}`);
+
+  const handleSwitchBill = async (billId) => {
+    try {
+      setIsSubmitting(true);
+      const targetBill = await fetchBillApi(billId);
+      setInspectedBill(targetBill);
+    } catch (err) {
+      setActionError('Failed to load linked bill details');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleRecordPayment = async (e) => {
     e.preventDefault();
@@ -83,13 +109,46 @@ export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
     }
   };
 
+  const handleRecordRefund = async (e) => {
+    e.preventDefault();
+    setActionError('');
+
+    const refundPaise = Math.round(parseFloat(refundAmountRs) * 100);
+    if (!refundPaise || refundPaise <= 0) {
+      setActionError('Please enter a valid refund amount');
+      return;
+    }
+
+    if (!refundReason.trim()) {
+      setActionError('A reason is mandatory when recording a refund.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await recordRefundApi(activeBill.id, {
+        amount: refundPaise,
+        reason: refundReason.trim(),
+        method: refundMethod
+      });
+      setShowRefundForm(false);
+      setRefundAmountRs('');
+      setRefundReason('');
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handlePrintReceipt = () => {
     printBillViaRawBT(activeBill, { businessProfile: profile });
   };
 
   return (
     <div className={styles.overlay}>
-      <div className={styles.modal} style={{ maxWidth: '800px' }}>
+      <div className={styles.modal} style={{ maxWidth: '820px' }}>
         {/* Header */}
         <div className={styles.header}>
           <div className={styles.titleGroup}>
@@ -112,12 +171,38 @@ export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
           </div>
         </div>
 
+        {/* Correction Lineage Badges & Links */}
+        {(activeBill.correctionOfBill || activeBill.correctedByBill) && (
+          <div style={{ padding: '8px 16px', backgroundColor: 'rgba(59, 110, 201, 0.1)', borderBottom: '1px solid var(--color-border)', display: 'flex', gap: '12px', alignItems: 'center', fontSize: '11px' }}>
+            <ArrowRightLeft size={14} color="var(--color-info)" />
+            <span style={{ fontWeight: 700, color: 'var(--color-info)' }}>Bill Correction Audit Lineage:</span>
+
+            {activeBill.correctionOfBill && (
+              <button
+                onClick={() => handleSwitchBill(activeBill.correctionOfBill.id)}
+                style={{ background: 'none', border: '1px solid var(--color-info)', color: 'var(--color-info)', borderRadius: '4px', padding: '2px 8px', cursor: 'pointer', fontWeight: 700 }}
+              >
+                Correction of Inv #{formatInvoiceNumber(activeBill.correctionOfBill.invoiceNumber, activeBill.correctionOfBill.financialYear)}
+              </button>
+            )}
+
+            {activeBill.correctedByBill && (
+              <button
+                onClick={() => handleSwitchBill(activeBill.correctedByBill.id)}
+                style={{ background: 'none', border: '1px solid var(--color-success)', color: 'var(--color-success)', borderRadius: '4px', padding: '2px 8px', cursor: 'pointer', fontWeight: 700 }}
+              >
+                Replaced by Inv #{formatInvoiceNumber(activeBill.correctedByBill.invoiceNumber, activeBill.correctedByBill.financialYear)}
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Voided Warning Banner */}
         {isVoided && (
           <div style={{ padding: '12px 16px', backgroundColor: 'rgba(196,57,43,0.15)', borderLeft: '4px solid var(--color-danger)', color: 'var(--color-danger)', fontWeight: 700, fontSize: 'var(--text-xs)', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Ban size={18} />
             <div>
-              THIS BILL HAS BEEN VOIDED ({new Date(activeBill.voidedAt).toLocaleDateString()}). Reason: "{activeBill.voidReason}"
+              THIS BILL HAS BEEN VOIDED ({new Date(activeBill.voidedAt).toLocaleDateString()} by {activeBill.voidedByStaff?.username || 'Staff'}). Reason: "{activeBill.voidReason}"
             </div>
           </div>
         )}
@@ -151,13 +236,21 @@ export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
               {activeBill.orders?.length === 0 ? (
                 <div style={{ padding: '12px', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>No food orders</div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', divideY: '1px solid var(--color-border)' }}>
-                  {activeBill.orders?.flatMap((ord) => ord.items || []).map((item, idx) => (
-                    <div key={idx} style={{ padding: '8px 12px', display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)' }}>
-                      <span>{item.quantity}x {item.menuItem?.name || 'Item'}</span>
-                      <span style={{ fontWeight: 600 }}>₹{((item.priceSnapshot * item.quantity) / 100).toFixed(2)}</span>
-                    </div>
-                  ))}
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  {activeBill.orders?.flatMap((ord) => ord.items || []).map((item, idx) => {
+                    const itemVoided = Boolean(item.voidedAt);
+                    return (
+                      <div key={idx} style={{ padding: '8px 12px', display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)', borderBottom: '1px solid var(--color-border)', opacity: itemVoided ? 0.55 : 1 }}>
+                        <span style={{ textDecoration: itemVoided ? 'line-through' : 'none' }}>
+                          {item.quantity}x {item.menuItem?.name || 'Item'}
+                          {itemVoided && <span style={{ color: 'var(--color-danger)', fontWeight: 700, marginLeft: '4px', fontSize: '10px' }}>[VOIDED]</span>}
+                        </span>
+                        <span style={{ fontWeight: 600, textDecoration: itemVoided ? 'line-through' : 'none' }}>
+                          ₹{((item.priceSnapshot * item.quantity) / 100).toFixed(2)}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -200,7 +293,7 @@ export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
             </div>
           </div>
 
-          {/* Right Column: Payment Status & Record Payment Form */}
+          {/* Right Column: Payment Status, Refunds & Actions */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
             
             {/* Balance Due Card */}
@@ -210,7 +303,7 @@ export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
                 {isPaid ? 'PAID IN FULL' : `BALANCE DUE: ₹${(activeBill.remainingBalance / 100).toFixed(2)}`}
               </div>
               <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
-                Total Paid So Far: ₹{((activeBill.totalPaid || 0) / 100).toFixed(2)}
+                Total Paid: ₹{((activeBill.totalPaid || 0) / 100).toFixed(2)} {activeBill.totalRefunded > 0 ? `| Refunded: ₹${(activeBill.totalRefunded / 100).toFixed(2)}` : ''}
               </div>
             </div>
 
@@ -247,6 +340,87 @@ export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
               )}
             </div>
 
+            {/* Refunds History List (Step 5 Audit Trail) */}
+            {activeBill.refunds?.length > 0 && (
+              <div style={{ border: '1px solid var(--color-danger)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+                <div style={{ padding: '8px 12px', backgroundColor: 'rgba(196,57,43,0.1)', fontWeight: 700, fontSize: 'var(--text-xs)', color: 'var(--color-danger)', borderBottom: '1px solid var(--color-danger)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <RotateCcw size={14} /> REFUNDS PROCESSED AUDIT
+                </div>
+                <div style={{ divideY: '1px solid var(--color-border)' }}>
+                  {activeBill.refunds.map((r) => (
+                    <div key={r.id} style={{ padding: '8px 12px', fontSize: 'var(--text-xs)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, color: 'var(--color-danger)' }}>
+                        <span>Method: {r.method}</span>
+                        <span>-₹{(r.amount / 100).toFixed(2)}</span>
+                      </div>
+                      <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
+                        Reason: "{r.reason}" • Processed by {r.staff?.username || 'Admin'} on {new Date(r.createdAt).toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Record Refund Action (Admin Only on Voided Bills with Payments) */}
+            {isAdmin && isVoided && (activeBill.totalPaid > 0) && (
+              <div style={{ padding: '12px', backgroundColor: 'rgba(196,57,43,0.08)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-danger)' }}>
+                {!showRefundForm ? (
+                  <Button variant="danger" onClick={() => setShowRefundForm(true)} style={{ width: '100%' }}>
+                    <RotateCcw size={16} /> Record Customer Cash/UPI Refund (Admin Only)
+                  </Button>
+                ) : (
+                  <form onSubmit={handleRecordRefund} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-danger)' }}>
+                      RECORD REFUND FOR VOIDED INVOICE
+                    </div>
+                    {actionError && <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-danger)' }}>{actionError}</div>}
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <Input
+                        label="Refund Amount (₹)"
+                        type="number"
+                        step="0.01"
+                        value={refundAmountRs}
+                        onChange={(e) => setRefundAmountRs(e.target.value)}
+                        placeholder={(activeBill.totalPaid / 100).toFixed(2)}
+                        required
+                      />
+                      <div>
+                        <label style={{ display: 'block', fontSize: 'var(--text-xs)', fontWeight: 700, marginBottom: '4px' }}>Method</label>
+                        <select
+                          value={refundMethod}
+                          onChange={(e) => setRefundMethod(e.target.value)}
+                          style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: 'var(--text-xs)', fontWeight: 600 }}
+                        >
+                          <option value="CASH">CASH</option>
+                          <option value="UPI">UPI</option>
+                          <option value="CARD">CARD</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <Input
+                      label="Mandatory Refund Reason"
+                      value={refundReason}
+                      onChange={(e) => setRefundReason(e.target.value)}
+                      placeholder="e.g. Overcollected amount refunded after order correction"
+                      required
+                    />
+
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <Button type="submit" variant="danger" disabled={isSubmitting}>
+                        {isSubmitting ? 'Recording...' : 'Confirm Refund'}
+                      </Button>
+                      <Button type="button" variant="secondary" onClick={() => setShowRefundForm(false)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            )}
+
             {/* Record New Payment Form (Only if balance remains and not voided) */}
             {!isPaid && !isVoided && (
               <form onSubmit={handleRecordPayment} style={{ padding: '12px', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -274,7 +448,7 @@ export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
                       <option value="CASH">CASH</option>
                       <option value="UPI">UPI / QR</option>
                       <option value="CARD">CREDIT/DEBIT CARD</option>
-                      <option value="NETBANKING">NETBANKING</option>
+                      <option value="OTHER">OTHER</option>
                     </select>
                   </div>
                 </div>
@@ -292,12 +466,12 @@ export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
               </form>
             )}
 
-            {/* Void Bill Action (Admin Only) */}
-            {isAdmin && !isVoided && (
+            {/* Void Bill Action (Step 4 Permission Matrix) */}
+            {canVoidBill && (
               <div style={{ marginTop: 'auto', paddingTop: '12px', borderTop: '1px dashed var(--color-border)' }}>
                 {!showVoidModal ? (
                   <Button variant="danger" onClick={() => setShowVoidModal(true)} style={{ width: '100%' }}>
-                    <AlertOctagon size={16} /> Void This Invoice (Admin Only)
+                    <AlertOctagon size={16} /> Void & Reissue Invoice ({isPaidOrPartial ? 'Admin Only' : 'Counter / Admin'})
                   </Button>
                 ) : (
                   <form onSubmit={handleVoidBill} style={{ padding: '12px', backgroundColor: 'rgba(196,57,43,0.1)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-danger)' }}>
@@ -308,7 +482,7 @@ export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
                       label="Mandatory Void Reason"
                       value={voidReason}
                       onChange={(e) => setVoidReason(e.target.value)}
-                      placeholder="e.g. Customer cancelled order / Wrong billing"
+                      placeholder="e.g. Items mistaken / Customer requested correction"
                       required
                     />
                     <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>

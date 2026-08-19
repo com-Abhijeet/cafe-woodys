@@ -7,15 +7,26 @@ export const billingRepository = {
       include: {
         table: { include: { zone: true } },
         staff: { select: { id: true, username: true } },
+        voidedByStaff: { select: { id: true, username: true } },
         customer: true,
+        correctionOfBill: {
+          select: { id: true, invoiceNumber: true, financialYear: true, grandTotal: true, paymentStatus: true, voidedAt: true }
+        },
+        correctedByBill: {
+          select: { id: true, invoiceNumber: true, financialYear: true, grandTotal: true, paymentStatus: true }
+        },
         orders: {
           include: {
-            items: { include: { menuItem: true } }
+            items: { include: { menuItem: true, voidedByStaff: { select: { id: true, username: true } } } }
           }
         },
         gamingSessions: true,
         payments: {
           orderBy: { paidAt: 'desc' }
+        },
+        refunds: {
+          include: { staff: { select: { id: true, username: true } } },
+          orderBy: { createdAt: 'desc' }
         }
       }
     });
@@ -61,8 +72,16 @@ export const billingRepository = {
       include: {
         table: { select: { id: true, name: true } },
         staff: { select: { id: true, username: true } },
+        voidedByStaff: { select: { id: true, username: true } },
         customer: { select: { id: true, name: true, phone: true } },
+        correctionOfBill: {
+          select: { id: true, invoiceNumber: true, financialYear: true }
+        },
+        correctedByBill: {
+          select: { id: true, invoiceNumber: true, financialYear: true }
+        },
         payments: { orderBy: { paidAt: 'desc' } },
+        refunds: { orderBy: { createdAt: 'desc' } },
         orders: { include: { items: { include: { menuItem: true } } } },
         gamingSessions: true
       },

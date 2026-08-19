@@ -7,14 +7,14 @@ export async function fetchDiscountRulesApi() {
 export async function createDiscountRuleApi(payload) {
   return apiClient('/discount-rules', {
     method: 'POST',
-    body: JSON.stringify(payload)
+    body: payload
   });
 }
 
 export async function updateDiscountRuleApi(id, payload) {
   return apiClient(`/discount-rules/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify(payload)
+    body: payload
   });
 }
 

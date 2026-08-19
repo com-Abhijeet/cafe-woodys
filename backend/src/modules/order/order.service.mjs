@@ -25,7 +25,9 @@ export const orderService = {
     const orders = await orderRepository.findByTableId(tableId, status);
 
     const foodTotal = orders.reduce((sum, order) => {
-      const orderSum = order.items.reduce((iSum, item) => iSum + (item.priceSnapshot * item.quantity), 0);
+      const orderSum = (order.items || [])
+        .filter((item) => !item.voidedAt)
+        .reduce((iSum, item) => iSum + (item.priceSnapshot * item.quantity), 0);
       return sum + orderSum;
     }, 0);
 
@@ -40,6 +42,17 @@ export const orderService = {
     return orderRepository.findAllOrders(filters);
   },
 
+  async voidOrderItem(orderItemId, staffId, { reason }) {
+    if (!reason || !reason.trim()) {
+      throw new ValidationError('A void reason is mandatory when voiding an order item', 'VOID_REASON_REQUIRED');
+    }
+
+    const updatedOrder = await orderRepository.voidOrderItemWithTransaction(orderItemId, staffId, reason);
+    broadcastKitchenStatusUpdated(updatedOrder);
+
+    return updatedOrder;
+  },
+
   async closeDay({ force = false } = {}) {
     const unresolved = await orderRepository.findUnresolvedBoardOrders();
 
@@ -52,7 +65,7 @@ export const orderService = {
           dailyOrderNumber: o.dailyOrderNumber,
           orderType: o.orderType,
           tableName: o.table?.name || (o.orderType === 'PARCEL' ? 'Parcel' : 'Unknown'),
-          itemCount: o.items?.reduce((sum, i) => sum + i.quantity, 0) || 0,
+          itemCount: o.items?.filter((i) => !i.voidedAt).reduce((sum, i) => sum + i.quantity, 0) || 0,
           status: o.status,
           kitchenStatus: o.kitchenStatus,
           createdAt: o.createdAt
