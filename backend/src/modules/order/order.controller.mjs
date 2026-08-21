@@ -24,16 +24,48 @@ export const orderController = {
     }
   },
 
+  async listActiveUnbilledOrders(req, res, next) {
+    try {
+      const { type } = req.query;
+      const orders = await orderService.getActiveUnbilledOrders({ type: type || 'all' });
+      return res.json({ data: orders });
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async voidOrderItem(req, res, next) {
     try {
       const { id } = req.params;
-      const parseResult = voidOrderItemSchema.safeParse(req.body);
-      if (!parseResult.success) {
-        throw new ValidationError('Invalid void item input', 'VALIDATION_ERROR', parseResult.error.flatten().fieldErrors);
+      const { reason, ignoreKitchenStatus } = req.body || {};
+      if (!reason || typeof reason !== 'string') {
+        throw new ValidationError('Invalid void item input', 'VALIDATION_ERROR');
       }
 
-      const updatedOrder = await orderService.voidOrderItem(id, req.user.id, parseResult.data);
+      const updatedOrder = await orderService.voidOrderItem(id, req.user.id, { reason, ignoreKitchenStatus });
       return res.json({ data: updatedOrder });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async voidAndReplaceOrderItem(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { reason, replacement } = req.body || {};
+      const updated = await orderService.voidAndReplaceOrderItem(id, req.user.id, { reason, replacement });
+      return res.json({ data: updated });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async addOrderItemToOrder(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { menuItemId, quantity, priceOverride } = req.body || {};
+      const updated = await orderService.addOrderItemToOrder(id, { menuItemId, quantity, priceOverride });
+      return res.json({ data: updated });
     } catch (err) {
       next(err);
     }
@@ -83,7 +115,7 @@ export const orderController = {
   },
 
   async createTableOrder(req, res, next) {
-    return this.createOrder(req, res, next);
+    return orderController.createOrder(req, res, next);
   },
 
   async closeDay(req, res, next) {

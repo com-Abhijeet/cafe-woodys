@@ -23,6 +23,7 @@ router.post('/bills/:id/void', requireRole(['COUNTER', 'ADMIN']), billingControl
 router.post('/bills/:id/refunds', requireRole(['ADMIN']), billingController.recordRefund);
 
 router.patch('/bills/:id/customer', billingController.updateBillCustomer);
+router.get('/bills/:id/edit-context', billingController.getBillEditContext);
 router.get('/bills/:id', billingController.getBillById);
 
 export default router;

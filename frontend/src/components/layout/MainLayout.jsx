@@ -14,6 +14,7 @@ const PurchaseManager = lazy(() => import('../../features/purchases/components/P
 const CustomerCRMManager = lazy(() => import('../../features/customers/components/CustomerCRMManager').then(m => ({ default: m.CustomerCRMManager })));
 const PaymentsManager = lazy(() => import('../../features/payments/components/PaymentsManager').then(m => ({ default: m.PaymentsManager })));
 const BillsHistoryManager = lazy(() => import('../../features/billing/components/BillsHistoryManager').then(m => ({ default: m.BillsHistoryManager })));
+const ActiveBillsPage = lazy(() => import('../../features/billing/components/ActiveBillsPage').then(m => ({ default: m.ActiveBillsPage })));
 const SettingsManager = lazy(() => import('../../features/settings/components/SettingsManager').then(m => ({ default: m.SettingsManager })));
 const ReportsDashboard = lazy(() => import('../../features/reports/components/ReportsDashboard').then(m => ({ default: m.ReportsDashboard })));
 
@@ -30,6 +31,7 @@ export function MainLayout() {
       }>
         {activeTab === 'FLOOR' && <TableGrid />}
         {activeTab === 'ORDERS_BOARD' && <OrdersBoard />}
+        {activeTab === 'ACTIVE_BILLS' && <ActiveBillsPage />}
         {activeTab === 'MENU' && <MenuManager />}
         {activeTab === 'INVENTORY' && <InventoryManager />}
         {activeTab === 'PURCHASES' && <PurchaseManager />}

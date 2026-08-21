@@ -19,13 +19,11 @@ export const businessProfileRepository = {
         defaultGstPercent: 5,
         gamingGracePeriodMinutes: 5,
         orderCancellationWindowSeconds: 300,
-        printerIpAddress: null,
         pricesIncludeTax: false,
-        thermalPaperWidthMm: 80,
-        thermalCharsPerLineOverride: null,
         upiId: null,
         upiPayeeName: null,
-        autoMarkBillsPaidInFull: false
+        autoMarkBillsPaidInFull: false,
+        alwaysSaveAndPrint: false
       }
     });
   },
@@ -45,13 +43,11 @@ export const businessProfileRepository = {
         ...(data.defaultGstPercent !== undefined && { defaultGstPercent: data.defaultGstPercent }),
         ...(data.gamingGracePeriodMinutes !== undefined && { gamingGracePeriodMinutes: data.gamingGracePeriodMinutes }),
         ...(data.orderCancellationWindowSeconds !== undefined && { orderCancellationWindowSeconds: data.orderCancellationWindowSeconds }),
-        ...(data.printerIpAddress !== undefined && { printerIpAddress: data.printerIpAddress }),
         ...(data.pricesIncludeTax !== undefined && { pricesIncludeTax: data.pricesIncludeTax }),
-        ...(data.thermalPaperWidthMm !== undefined && { thermalPaperWidthMm: data.thermalPaperWidthMm }),
-        ...(data.thermalCharsPerLineOverride !== undefined && { thermalCharsPerLineOverride: data.thermalCharsPerLineOverride }),
         ...(data.upiId !== undefined && { upiId: data.upiId }),
         ...(data.upiPayeeName !== undefined && { upiPayeeName: data.upiPayeeName }),
-        ...(data.autoMarkBillsPaidInFull !== undefined && { autoMarkBillsPaidInFull: data.autoMarkBillsPaidInFull })
+        ...(data.autoMarkBillsPaidInFull !== undefined && { autoMarkBillsPaidInFull: data.autoMarkBillsPaidInFull }),
+        ...(data.alwaysSaveAndPrint !== undefined && { alwaysSaveAndPrint: data.alwaysSaveAndPrint })
       }
     });
   }

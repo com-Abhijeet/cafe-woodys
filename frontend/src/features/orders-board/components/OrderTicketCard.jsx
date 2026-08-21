@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
 import { useBusinessProfile } from '../../settings/hooks/useBusinessProfile';
-import { EntityCard } from '../../../components/ui/EntityCard';
 import { formatKitchenStatus } from '../../../lib/labels';
-import { Clock, Play, CheckCircle2, BellRing, Undo2, ShoppingBag } from 'lucide-react';
+import { Clock, Play, CheckCircle2, BellRing, Undo2 } from 'lucide-react';
 import styles from './OrderTicketCard.module.css';
 
 export function OrderTicketCard({ order, onAdvanceStatus, onCancelOrder }) {
@@ -43,7 +42,6 @@ export function OrderTicketCard({ order, onAdvanceStatus, onCancelOrder }) {
   const status = order.kitchenStatus || 'PENDING';
   const isDelayed = (status === 'PENDING' || status === 'PREPARING') && elapsedMins >= 10;
   
-  // cancellation window from profile settings or default 300s
   const cancellationWindowSecs = profile?.orderCancellationWindowSeconds ?? 300;
   const canUndo = elapsedSecsTotal <= cancellationWindowSecs && status === 'PENDING' && (role === 'WAITER' || role === 'ADMIN' || role === 'COUNTER');
 
@@ -108,46 +106,71 @@ export function OrderTicketCard({ order, onAdvanceStatus, onCancelOrder }) {
 
   const isParcel = order.orderType === 'PARCEL' || !order.tableId;
   const locationLabel = isParcel
-    ? '🛍️ PARCEL / TAKEAWAY'
-    : `Table ${order.table?.name || 'Table'}`;
+    ? 'PARCEL / TAKEAWAY'
+    : (order.table?.name ? `Table ${order.table.name}` : 'Table');
 
-  const headlineTitle = order.dailyOrderNumber
-    ? `Order #${order.dailyOrderNumber}`
-    : locationLabel;
-
-  const getBadgeVariant = (st) => {
-    if (isDelayed) return 'danger';
-    switch (st) {
-      case 'READY': return 'success';
-      case 'PREPARING': return 'info';
-      case 'SERVED': return 'default';
-      case 'PENDING': default: return 'warning';
-    }
-  };
+  // Step 6: Dine-in vs Parcel shown via left-border color accent
+  const leftBorderColor = isParcel ? '#27ae60' : '#6B3F2A';
 
   return (
-    <EntityCard
-      title={headlineTitle}
-      subtitle={`${locationLabel} • ${order.staff?.username || 'Staff'}`}
-      badgeText={isDelayed ? '⚠️ DELAYED (>10m)' : formatKitchenStatus(status)}
-      badgeVariant={getBadgeVariant(status)}
-      footerLeft={
-        <span style={{ fontSize: 'var(--text-xs)', color: isDelayed ? 'var(--color-danger)' : 'var(--color-text-secondary)', fontWeight: isDelayed ? 800 : 500, display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <Clock size={12} /> {elapsedText}
-        </span>
-      }
+    <div
+      style={{
+        backgroundColor: 'var(--color-surface)',
+        borderRadius: 'var(--radius-md)',
+        border: '1px solid var(--color-border)',
+        borderLeft: `5px solid ${leftBorderColor}`,
+        padding: '12px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
+        height: 'auto', // Step 6: Height fits content, not a fixed size
+        boxShadow: 'var(--shadow-card)'
+      }}
     >
-      {/* Inline Dish Items List (always visible without needing tap) */}
-      <div className={styles.itemsList} style={{ marginTop: '4px' }}>
+      {/* Header: Order Number (Primary, Largest Element) */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <div style={{ fontSize: 'var(--text-lg)', fontWeight: 800, color: 'var(--color-brand)', lineHeight: 1.1 }}>
+            Order #{order.dailyOrderNumber || order.id.slice(-4).toUpperCase()}
+          </div>
+          <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600, marginTop: '2px' }}>
+            {locationLabel} • {order.staff?.username || 'Staff'}
+          </div>
+        </div>
+
+        {/* Status Badge */}
+        <span
+          style={{
+            fontSize: '10px',
+            fontWeight: 800,
+            padding: '3px 8px',
+            borderRadius: '4px',
+            textTransform: 'uppercase',
+            backgroundColor: isDelayed ? 'rgba(196,57,43,0.15)' : status === 'READY' ? 'rgba(39,174,96,0.15)' : status === 'PREPARING' ? 'rgba(41,128,185,0.15)' : 'rgba(230,126,34,0.15)',
+            color: isDelayed ? 'var(--color-danger)' : status === 'READY' ? 'var(--color-success)' : status === 'PREPARING' ? 'var(--color-info)' : 'var(--color-warning)'
+          }}
+        >
+          {isDelayed ? '⚠️ DELAYED (>10m)' : formatKitchenStatus(status)}
+        </span>
+      </div>
+
+      {/* Phase 20 Step 5: Inline Kitchen Prep Item List (NO prices on Order Tracker screen) */}
+      <div style={{ borderTop: '1px dashed var(--color-border)', borderBottom: '1px dashed var(--color-border)', padding: '6px 0', margin: '2px 0' }}>
         {order.items?.filter((i) => !i.voidedAt).map((i) => (
-          <div key={i.id} className={styles.itemRow} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)', padding: '2px 0' }}>
-            <span><strong>{i.quantity}x</strong> {i.menuItem?.name || 'Dish'}</span>
-            <span style={{ fontWeight: 600, color: 'var(--color-text-secondary)' }}>₹{((i.priceSnapshot * i.quantity) / 100).toFixed(2)}</span>
+          <div key={i.id} style={{ fontSize: 'var(--text-xs)', padding: '2px 0', color: 'var(--color-text-primary)', fontWeight: 500 }}>
+            <strong style={{ color: 'var(--color-brand)' }}>{i.quantity}x</strong> {i.menuItem?.name || 'Dish'}
           </div>
         ))}
       </div>
 
-      {actionButton}
+      {/* Footer: Timer & Action Button */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
+        <span style={{ fontSize: '11px', color: isDelayed ? 'var(--color-danger)' : 'var(--color-text-secondary)', fontWeight: isDelayed ? 800 : 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <Clock size={12} /> {elapsedText}
+        </span>
+
+        {actionButton}
+      </div>
 
       {/* Undo Order Window */}
       {canUndo && onCancelOrder && (
@@ -159,7 +182,7 @@ export function OrderTicketCard({ order, onAdvanceStatus, onCancelOrder }) {
             }
           }}
           style={{
-            marginTop: '6px',
+            marginTop: '4px',
             background: 'none',
             border: 'none',
             color: 'var(--color-danger)',
@@ -176,6 +199,6 @@ export function OrderTicketCard({ order, onAdvanceStatus, onCancelOrder }) {
           <Undo2 size={12} /> Undo Order ({cancellationWindowSecs - elapsedSecsTotal}s left)
         </button>
       )}
-    </EntityCard>
+    </div>
   );
 }

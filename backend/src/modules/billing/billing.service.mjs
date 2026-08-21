@@ -106,6 +106,9 @@ export const billingService = {
         where: { id: targetId },
         include: { items: { include: { menuItem: true } } }
       });
+      if (singleOrder && singleOrder.orderType === 'PARCEL') {
+        return []; // Takeaways are prepaid — skip kitchen prep status check
+      }
       if (singleOrder && singleOrder.status === 'OPEN') {
         openOrders = [singleOrder];
       }
@@ -113,6 +116,7 @@ export const billingService = {
 
     const unfinished = [];
     for (const order of openOrders) {
+      if (order.orderType === 'PARCEL') continue;
       if (order.kitchenStatus !== 'SERVED') {
         unfinished.push({
           orderId: order.id,
@@ -341,7 +345,16 @@ export const billingService = {
     };
   },
 
-  async generateBill(targetId, staffId, { discountAmount = 0, discountReason = null, customerId = null, autoPayMethod = null, ignoreKitchenWarning = false, correctionOfBillId = null }) {
+  async generateBill(targetId, staffId, billData = {}) {
+    const {
+      discountAmount = 0,
+      discountReason = null,
+      customerId = null,
+      autoPayMethod = null,
+      payment = null,
+      ignoreKitchenWarning = false,
+      correctionOfBillId = null
+    } = billData;
     let table = await prisma.table.findUnique({ where: { id: targetId } });
     let singleOrder = null;
 
@@ -471,8 +484,13 @@ export const billingService = {
         : Math.max(0, grossSubtotal - discountAmount) + totalCgst + totalSgst;
 
       const { invoiceNumber, financialYear } = await generateInvoiceNumber(tx, now);
-      const isAutoPay = Boolean(autoPayMethod);
-      const initialPaymentStatus = isAutoPay ? 'PAID' : 'UNPAID';
+      const paymentObj = payment || billData?.payment;
+      let initialPaymentStatus = 'UNPAID';
+      if (paymentObj) {
+        initialPaymentStatus = paymentObj.amount >= grandTotal ? 'PAID' : 'PARTIALLY_PAID';
+      } else if (autoPayMethod) {
+        initialPaymentStatus = 'PAID';
+      }
 
       const bill = await tx.bill.create({
         data: {
@@ -507,7 +525,17 @@ export const billingService = {
         });
       }
 
-      if (isAutoPay) {
+      if (paymentObj) {
+        await tx.payment.create({
+          data: {
+            billId: bill.id,
+            amount: paymentObj.amount,
+            method: paymentObj.method,
+            reference: paymentObj.reference?.trim() || null,
+            paidAt: now
+          }
+        });
+      } else if (autoPayMethod) {
         await tx.payment.create({
           data: {
             billId: bill.id,
@@ -517,13 +545,6 @@ export const billingService = {
             paidAt: now
           }
         });
-
-        if (table) {
-          await tx.table.update({
-            where: { id: targetId },
-            data: { status: 'FREE' }
-          });
-        }
       }
 
       return bill;
@@ -766,5 +787,49 @@ export const billingService = {
     });
 
     return this.getBillById(billId);
+  },
+
+  async getBillEditContext(billId) {
+    const bill = await prisma.bill.findUnique({
+      where: { id: billId },
+      include: {
+        customer: true,
+        staff: { select: { id: true, username: true } },
+        table: { select: { id: true, name: true, zoneId: true } },
+        orders: {
+          include: {
+            items: {
+              include: { menuItem: true, voidedByStaff: { select: { id: true, username: true } } }
+            }
+          }
+        },
+        reopenedOrders: {
+          include: {
+            items: {
+              include: { menuItem: true, voidedByStaff: { select: { id: true, username: true } } }
+            }
+          }
+        }
+      }
+    });
+
+    if (!bill) {
+      throw new NotFoundError('Bill not found', 'BILL_NOT_FOUND');
+    }
+
+    const menuItems = await prisma.menuItem.findMany({
+      where: { isAvailable: true },
+      orderBy: { name: 'asc' }
+    });
+
+    const combinedOrders = [...(bill.orders || []), ...(bill.reopenedOrders || [])];
+    const uniqueOrdersMap = new Map();
+    combinedOrders.forEach((o) => uniqueOrdersMap.set(o.id, o));
+
+    return {
+      bill,
+      orders: Array.from(uniqueOrdersMap.values()),
+      menuItems
+    };
   }
 };

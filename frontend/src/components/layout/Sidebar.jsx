@@ -9,6 +9,7 @@ import {
   Truck,
   UserCheck,
   CreditCard,
+  ReceiptText,
   Receipt,
   BarChart3,
   Settings,
@@ -68,6 +69,17 @@ export function Sidebar({ activeTab, onSelectTab, role = 'ADMIN', isCollapsed, o
             onClick={() => onSelectTab('ORDERS_BOARD')}
             isCollapsed={isCollapsed}
             badge={liveBadge}
+          />
+        )}
+
+        {/* 2b. Active Unbilled Orders */}
+        {isVisible('ACTIVE_BILLS') && (
+          <SidebarItem
+            icon={ReceiptText}
+            label="Active Bills"
+            isActive={activeTab === 'ACTIVE_BILLS'}
+            onClick={() => onSelectTab('ACTIVE_BILLS')}
+            isCollapsed={isCollapsed}
           />
         )}
 

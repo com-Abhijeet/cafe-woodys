@@ -42,12 +42,47 @@ export const orderService = {
     return orderRepository.findAllOrders(filters);
   },
 
-  async voidOrderItem(orderItemId, staffId, { reason }) {
+  async getActiveUnbilledOrders({ type = 'all' } = {}) {
+    const orders = await orderRepository.findActiveUnbilledOrders({ type });
+    return orders.map((o) => {
+      const activeItems = (o.items || []).filter((i) => !i.voidedAt);
+      const foodTotal = activeItems.reduce((sum, i) => sum + i.priceSnapshot * i.quantity, 0);
+      const itemCount = activeItems.reduce((sum, i) => sum + i.quantity, 0);
+      const elapsedTimeMinutes = Math.max(0, Math.floor((Date.now() - new Date(o.createdAt).getTime()) / 60000));
+
+      return {
+        ...o,
+        foodTotal,
+        itemCount,
+        elapsedTimeMinutes
+      };
+    });
+  },
+
+  async voidOrderItem(orderItemId, staffId, { reason, ignoreKitchenStatus = false }) {
     if (!reason || !reason.trim()) {
       throw new ValidationError('A void reason is mandatory when voiding an order item', 'VOID_REASON_REQUIRED');
     }
 
-    const updatedOrder = await orderRepository.voidOrderItemWithTransaction(orderItemId, staffId, reason);
+    const updatedOrder = await orderRepository.voidOrderItemWithTransaction(orderItemId, staffId, reason, ignoreKitchenStatus);
+    broadcastKitchenStatusUpdated(updatedOrder);
+
+    return updatedOrder;
+  },
+
+  async voidAndReplaceOrderItem(orderItemId, staffId, { reason, replacement }) {
+    if (!reason || !reason.trim()) {
+      throw new ValidationError('A void reason is mandatory when voiding an order item', 'VOID_REASON_REQUIRED');
+    }
+
+    const updatedOrder = await orderRepository.voidAndReplaceOrderItemWithTransaction(orderItemId, staffId, { reason, replacement });
+    broadcastKitchenStatusUpdated(updatedOrder);
+
+    return updatedOrder;
+  },
+
+  async addOrderItemToOrder(orderId, { menuItemId, quantity, priceOverride }) {
+    const updatedOrder = await orderRepository.addOrderItemToOrderWithTransaction(orderId, { menuItemId, quantity, priceOverride });
     broadcastKitchenStatusUpdated(updatedOrder);
 
     return updatedOrder;
@@ -75,6 +110,13 @@ export const orderService = {
 
     const { clearedCount, timestamp } = await orderRepository.clearBoardOrders();
     broadcastOrderBoardCleared({ clearedCount, timestamp });
+
+    try {
+      const allTables = await tableRepository.findAll();
+      allTables.forEach((t) => broadcastTableUpdate(t));
+    } catch (tErr) {
+      console.error('Error broadcasting table updates on close day:', tErr);
+    }
 
     return {
       canClose: true,

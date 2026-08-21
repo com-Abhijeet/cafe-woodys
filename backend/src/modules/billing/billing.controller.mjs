@@ -143,5 +143,15 @@ export const billingController = {
     } catch (err) {
       next(err);
     }
+  },
+
+  async getBillEditContext(req, res, next) {
+    try {
+      const { id } = req.params;
+      const context = await billingService.getBillEditContext(id);
+      return res.json({ data: context });
+    } catch (err) {
+      next(err);
+    }
   }
 };

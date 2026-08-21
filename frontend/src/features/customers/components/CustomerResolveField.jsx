@@ -154,7 +154,7 @@ export function CustomerResolveField({ selectedCustomer, onSelectCustomer, onCle
             )}
           </div>
 
-          {/* Search Results Dropdown */}
+          {/* Search Results Dropdown (Step 7: onMouseDown prevents blur race condition) */}
           {showDropdown && (
             <div style={{
               position: 'absolute',
@@ -175,14 +175,17 @@ export function CustomerResolveField({ selectedCustomer, onSelectCustomer, onCle
                   {suggestions.map((c) => (
                     <div
                       key={c.id}
-                      onClick={() => handleSelect(c)}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        handleSelect(c);
+                      }}
                       style={{
                         padding: '8px 12px',
                         fontSize: 'var(--text-xs)',
                         cursor: 'pointer',
                         borderBottom: '1px solid var(--color-border)',
                         display: 'flex',
-                        justify: 'space-between',
+                        justifyContent: 'space-between',
                         alignItems: 'center'
                       }}
                       onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-bg)'}
@@ -197,7 +200,10 @@ export function CustomerResolveField({ selectedCustomer, onSelectCustomer, onCle
                   ))}
 
                   <div
-                    onClick={() => handleImplicitCreate(query)}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleImplicitCreate(query);
+                    }}
                     style={{
                       padding: '8px 12px',
                       fontSize: 'var(--text-xs)',
@@ -215,7 +221,10 @@ export function CustomerResolveField({ selectedCustomer, onSelectCustomer, onCle
                 </>
               ) : (
                 <div
-                  onClick={() => handleImplicitCreate(query)}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleImplicitCreate(query);
+                  }}
                   style={{
                     padding: '10px 12px',
                     fontSize: 'var(--text-xs)',

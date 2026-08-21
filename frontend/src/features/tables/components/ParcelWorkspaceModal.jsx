@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMenu } from '../../menu/hooks/useMenu';
 import { submitParcelOrderApi } from '../../orders/api/orders.api';
 import { CategorySidebar } from './CategorySidebar';
@@ -9,7 +9,7 @@ import { Button } from '../../../components/ui/Button/Button';
 import { X, ShoppingBag, Eye } from 'lucide-react';
 import styles from './TableWorkspaceModal.module.css';
 
-export function ParcelWorkspaceModal({ onClose, onRefreshTable }) {
+export function ParcelWorkspaceModal({ existingOrder = null, onClose, onRefreshTable }) {
   const [workspaceView, setWorkspaceView] = useState('ORDERING');
   const { items: menuItems, isLoading: isMenuLoading } = useMenu();
 
@@ -17,7 +17,13 @@ export function ParcelWorkspaceModal({ onClose, onRefreshTable }) {
   const [cart, setCart] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionError, setActionError] = useState('');
-  const [submittedParcelOrder, setSubmittedParcelOrder] = useState(null);
+  const [submittedParcelOrder, setSubmittedParcelOrder] = useState(existingOrder);
+
+  useEffect(() => {
+    if (existingOrder) {
+      setSubmittedParcelOrder(existingOrder);
+    }
+  }, [existingOrder]);
 
   const categories = Array.from(new Set(menuItems.map((m) => m.category))).filter(Boolean);
   const filteredMenuItems = selectedCategory === 'ALL'
@@ -61,10 +67,13 @@ export function ParcelWorkspaceModal({ onClose, onRefreshTable }) {
     }));
 
     try {
-      const createdOrder = await submitParcelOrderApi(itemsPayload);
+      const createdOrder = await submitParcelOrderApi(itemsPayload, submittedParcelOrder?.customerId || null);
       setCart([]);
       setSubmittedParcelOrder(createdOrder);
       if (onRefreshTable) onRefreshTable();
+
+      // Phase 21 Step 4: Takeaway = one order per bill. Transition straight to unified BillingView
+      setWorkspaceView('BILLING');
     } catch (err) {
       setActionError(err.message || 'Failed to submit parcel order');
     } finally {
@@ -72,9 +81,14 @@ export function ParcelWorkspaceModal({ onClose, onRefreshTable }) {
     }
   };
 
+  const activeItems = submittedParcelOrder?.items?.filter((i) => !i.voidedAt) || [];
+  const existingSubtotal = activeItems.reduce((sum, i) => sum + (i.priceSnapshot * i.quantity), 0);
+
   const parcelTableData = {
-    id: submittedParcelOrder ? submittedParcelOrder.id : null,
-    name: submittedParcelOrder ? `Order #${submittedParcelOrder.dailyOrderNumber}` : 'New Takeaway',
+    id: submittedParcelOrder?.id || null,
+    name: submittedParcelOrder
+      ? `Order #${submittedParcelOrder.dailyOrderNumber || (submittedParcelOrder.id ? submittedParcelOrder.id.slice(-4).toUpperCase() : '')}`
+      : 'New Takeaway',
     zone: { name: 'PARCEL / TAKEAWAY' },
     orderType: 'PARCEL'
   };
@@ -84,8 +98,15 @@ export function ParcelWorkspaceModal({ onClose, onRefreshTable }) {
       {workspaceView === 'BILLING' && submittedParcelOrder ? (
         <BillPreview
           table={parcelTableData}
+          initialBill={submittedParcelOrder}
           onBackToOrdering={() => setWorkspaceView('ORDERING')}
           onRefreshTable={onRefreshTable}
+          onBillSettled={() => {
+            setSubmittedParcelOrder(null);
+            setCart([]);
+            setWorkspaceView('ORDERING');
+            if (onRefreshTable) onRefreshTable();
+          }}
         />
       ) : (
         <>
@@ -93,7 +114,7 @@ export function ParcelWorkspaceModal({ onClose, onRefreshTable }) {
           <div className={styles.workspaceHeader}>
             <div className={styles.tableTitleGroup}>
               <h2 className={styles.tableName} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <ShoppingBag size={22} color="var(--color-primary)" /> New Parcel / Takeaway Order
+                <ShoppingBag size={22} color="var(--color-primary)" /> {submittedParcelOrder ? `Edit Order #${submittedParcelOrder.dailyOrderNumber || ''} (Takeaway)` : 'New Parcel / Takeaway Order'}
               </h2>
               <span
                 className={styles.zoneBadge}
@@ -109,7 +130,7 @@ export function ParcelWorkspaceModal({ onClose, onRefreshTable }) {
                   <Eye size={16} /> View Parcel Bill Preview
                 </Button>
               )}
-              <button className={styles.closeBtn} onClick={onClose} title="Close Parcel Order">
+              <button className={styles.closeBtn} onClick={onClose} title="Close Parcel Workspace">
                 <X size={20} />
               </button>
             </div>
@@ -149,7 +170,8 @@ export function ParcelWorkspaceModal({ onClose, onRefreshTable }) {
                 onSubmitOrder={handleSubmitParcelOrder}
                 isSubmitting={isSubmitting}
                 orders={submittedParcelOrder ? [submittedParcelOrder] : []}
-                unbilledFoodTotal={cart.reduce((sum, c) => sum + (c.menuItem.price * c.quantity), 0)}
+                unbilledFoodTotal={existingSubtotal + cart.reduce((sum, c) => sum + (c.menuItem.price * c.quantity), 0)}
+                onRefreshOrders={onRefreshTable}
               />
             </div>
           </div>

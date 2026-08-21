@@ -58,7 +58,7 @@ export const orderRepository = {
     });
   },
 
-  async voidOrderItemWithTransaction(orderItemId, staffId, reason) {
+  async voidOrderItemWithTransaction(orderItemId, staffId, reason, ignoreKitchenStatus = false) {
     return prisma.$transaction(async (tx) => {
       const item = await tx.orderItem.findUnique({
         where: { id: orderItemId },
@@ -73,7 +73,9 @@ export const orderRepository = {
         throw new ConflictError('Order item is already voided', 'ITEM_ALREADY_VOIDED');
       }
 
-      if (item.order.kitchenStatus !== 'PENDING') {
+      const isCorrectionMode = Boolean(item.order.reopenedFromBillId) || ignoreKitchenStatus;
+
+      if (item.order.kitchenStatus !== 'PENDING' && !isCorrectionMode) {
         throw new ConflictError('Cannot void item after kitchen preparation has started', 'KITCHEN_PREP_STARTED');
       }
 
@@ -110,6 +112,154 @@ export const orderRepository = {
           items: { include: { menuItem: true, voidedByStaff: { select: { id: true, username: true } } } }
         }
       });
+    });
+  },
+
+  async voidAndReplaceOrderItemWithTransaction(orderItemId, staffId, { reason, replacement }) {
+    return prisma.$transaction(async (tx) => {
+      const oldItem = await tx.orderItem.findUnique({
+        where: { id: orderItemId },
+        include: { order: true }
+      });
+
+      if (!oldItem) throw new NotFoundError('Order item not found', 'ORDER_ITEM_NOT_FOUND');
+      if (oldItem.voidedAt) throw new ConflictError('Order item is already voided', 'ITEM_ALREADY_VOIDED');
+
+      // 1. Restore stock for old item
+      const oldIngredients = await tx.recipeIngredient.findMany({
+        where: { menuItemId: oldItem.menuItemId }
+      });
+      for (const ing of oldIngredients) {
+        const qtyToRestore = Number(ing.quantity) * oldItem.quantity;
+        await tx.inventoryItem.update({
+          where: { id: ing.inventoryItemId },
+          data: { stockQuantity: { increment: qtyToRestore } }
+        });
+      }
+
+      // 2. Mark old item as voided
+      await tx.orderItem.update({
+        where: { id: orderItemId },
+        data: {
+          voidedAt: new Date(),
+          voidReason: reason.trim(),
+          voidedByStaffId: staffId
+        }
+      });
+
+      // 3. Create replacement line item if provided
+      if (replacement && replacement.menuItemId && replacement.quantity > 0) {
+        const menuItem = await tx.menuItem.findUnique({ where: { id: replacement.menuItemId } });
+        if (!menuItem) throw new NotFoundError('Replacement menu item not found', 'MENU_ITEM_NOT_FOUND');
+
+        // Deduct ingredient stock for replacement
+        const repIngredients = await tx.recipeIngredient.findMany({
+          where: { menuItemId: replacement.menuItemId },
+          include: { inventoryItem: true }
+        });
+        for (const ing of repIngredients) {
+          const needed = Number(ing.quantity) * replacement.quantity;
+          await tx.inventoryItem.update({
+            where: { id: ing.inventoryItemId },
+            data: { stockQuantity: { decrement: needed } }
+          });
+        }
+
+        const gstPercentSnapshot = menuItem.gstPercent != null ? Number(menuItem.gstPercent) : 5;
+        const priceSnapshot = replacement.priceOverride != null ? Number(replacement.priceOverride) : menuItem.price;
+
+        await tx.orderItem.create({
+          data: {
+            orderId: oldItem.orderId,
+            menuItemId: replacement.menuItemId,
+            quantity: replacement.quantity,
+            priceSnapshot,
+            gstPercentSnapshot
+          }
+        });
+      }
+
+      return tx.order.findUnique({
+        where: { id: oldItem.orderId },
+        include: {
+          table: { select: { id: true, name: true } },
+          staff: { select: { id: true, username: true } },
+          customer: { select: { id: true, name: true, phone: true } },
+          items: { include: { menuItem: true, voidedByStaff: { select: { id: true, username: true } } } }
+        }
+      });
+    });
+  },
+
+  async addOrderItemToOrderWithTransaction(orderId, { menuItemId, quantity, priceOverride }) {
+    return prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({ where: { id: orderId } });
+      if (!order) throw new NotFoundError('Order not found', 'ORDER_NOT_FOUND');
+
+      const menuItem = await tx.menuItem.findUnique({ where: { id: menuItemId } });
+      if (!menuItem) throw new NotFoundError('Menu item not found', 'MENU_ITEM_NOT_FOUND');
+
+      // Deduct inventory
+      const ingredients = await tx.recipeIngredient.findMany({
+        where: { menuItemId },
+        include: { inventoryItem: true }
+      });
+      for (const ing of ingredients) {
+        const needed = Number(ing.quantity) * quantity;
+        await tx.inventoryItem.update({
+          where: { id: ing.inventoryItemId },
+          data: { stockQuantity: { decrement: needed } }
+        });
+      }
+
+      const gstPercentSnapshot = menuItem.gstPercent != null ? Number(menuItem.gstPercent) : 5;
+      const priceSnapshot = priceOverride != null ? Number(priceOverride) : menuItem.price;
+
+      await tx.orderItem.create({
+        data: {
+          orderId,
+          menuItemId,
+          quantity,
+          priceSnapshot,
+          gstPercentSnapshot
+        }
+      });
+
+      return tx.order.findUnique({
+        where: { id: orderId },
+        include: {
+          table: { select: { id: true, name: true } },
+          staff: { select: { id: true, username: true } },
+          customer: { select: { id: true, name: true, phone: true } },
+          items: { include: { menuItem: true, voidedByStaff: { select: { id: true, username: true } } } }
+        }
+      });
+    });
+  },
+
+  async findActiveUnbilledOrders({ type = 'all' } = {}) {
+    const where = {
+      status: 'OPEN',
+      billId: null
+    };
+
+    if (type === 'dine-in') {
+      where.orderType = 'DINE_IN';
+    } else if (type === 'parcel') {
+      where.orderType = 'PARCEL';
+    }
+
+    return prisma.order.findMany({
+      where,
+      include: {
+        table: { select: { id: true, name: true, zone: { select: { id: true, name: true } } } },
+        staff: { select: { id: true, username: true } },
+        customer: { select: { id: true, name: true, phone: true } },
+        items: {
+          include: { menuItem: true, voidedByStaff: { select: { id: true, username: true } } }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
     });
   },
 
@@ -165,12 +315,44 @@ export const orderRepository = {
   },
 
   async clearBoardOrders() {
-    const now = new Date();
-    const result = await prisma.order.updateMany({
-      where: { boardClearedAt: null },
-      data: { boardClearedAt: now }
+    return prisma.$transaction(async (tx) => {
+      const now = new Date();
+
+      // 1. Auto-cancel lingering unbilled OPEN orders so they do not leak into Pending Bills tomorrow
+      await tx.order.updateMany({
+        where: {
+          status: 'OPEN',
+          billId: null
+        },
+        data: {
+          status: 'CANCELLED',
+          boardClearedAt: now
+        }
+      });
+
+      // 2. Mark boardClearedAt on all remaining uncleared orders
+      const result = await tx.order.updateMany({
+        where: { boardClearedAt: null },
+        data: { boardClearedAt: now }
+      });
+
+      // 3. Reset ALL tables to FREE status
+      await tx.table.updateMany({
+        where: { status: { not: 'FREE' } },
+        data: { status: 'FREE' }
+      });
+
+      // 4. Close any active gaming sessions
+      await tx.gamingSession.updateMany({
+        where: { status: 'ACTIVE' },
+        data: {
+          status: 'CLOSED',
+          endTime: now
+        }
+      });
+
+      return { clearedCount: result.count, timestamp: now };
     });
-    return { clearedCount: result.count, timestamp: now };
   },
 
   async updateKitchenStatus(id, kitchenStatus) {

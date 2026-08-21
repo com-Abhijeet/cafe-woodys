@@ -126,12 +126,13 @@ model Staff {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  orders               Order[]
-  bills                Bill[]
+  orders         Order[]
+  bills          Bill[]
   inventoryAdjustments InventoryAdjustment[]
-  voidedBills          Bill[]   @relation("VoidedBills")
-  voidedOrderItems     OrderItem[]
-  refunds              Refund[]
+  voidedBills    Bill[]   @relation("VoidedBills")
+  voidedOrderItems OrderItem[]
+  voidedGamingSessions GamingSession[]
+  refunds        Refund[]
 }
 
 // ─────────────────────────────────────────────
@@ -139,32 +140,32 @@ model Staff {
 // ─────────────────────────────────────────────
 
 model Zone {
-  id                  String   @id @default(uuid())
-  name                String
-  type                ZoneType
-  defaultHalfHourRate Int?     // paise per player, 0-30 min slab — gaming zones only
-  defaultHourlyRate   Int?     // paise per player, 31-60 min slab — gaming zones only
-  defaultMaxPlayers   Int?     // seat capacity, gaming zones only
-  gstPercent          Decimal? // total GST % applied to this zone's gaming charge — null means fall back to BusinessProfile.defaultGstPercent. Gaming/amusement services are commonly taxed at a different rate from food in India — confirm the correct rate with the client's accountant, don't assume it matches the food rate.
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                    String   @id @default(uuid())
+  name                  String
+  type                  ZoneType
+  defaultHalfHourRate   Int?     // paise per player, 0-30 min slab — gaming zones only
+  defaultHourlyRate     Int?     // paise per player, 31-60 min slab — gaming zones only
+  defaultMaxPlayers     Int?     // seat capacity, gaming zones only
+  gstPercent            Decimal? // total GST % applied to this zone's gaming charge — null means fall back to BusinessProfile.defaultGstPercent. Gaming/amusement services are commonly taxed at a different rate from food in India — confirm the correct rate with the client's accountant, don't assume it matches the food rate.
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-  tables        Table[]
+  tables Table[]
   discountRules DiscountRule[]
 }
 
 model Table {
-  id           String      @id @default(uuid())
-  zoneId       String
-  zone         Zone        @relation(fields: [zoneId], references: [id], onDelete: Restrict)
-  name         String
-  capacity     Int
-  halfHourRate Int?        // overrides zone.defaultHalfHourRate if set (paise)
-  hourlyRate   Int?        // overrides zone.defaultHourlyRate if set (paise)
-  maxPlayers   Int?        // overrides zone.defaultMaxPlayers if set — caps concurrent ACTIVE GamingSessions on this table
-  status       TableStatus @default(FREE)
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id            String      @id @default(uuid())
+  zoneId        String
+  zone          Zone        @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+  name          String
+  capacity      Int
+  halfHourRate  Int?        // overrides zone.defaultHalfHourRate if set (paise)
+  hourlyRate    Int?        // overrides zone.defaultHourlyRate if set (paise)
+  maxPlayers    Int?        // overrides zone.defaultMaxPlayers if set — caps concurrent ACTIVE GamingSessions on this table
+  status        TableStatus @default(FREE)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
   gamingSessions GamingSession[]
   orders         Order[]
@@ -187,6 +188,8 @@ model GamingSession {
   table                Table               @relation(fields: [tableId], references: [id], onDelete: Restrict)
   billId               String?
   bill                 Bill?               @relation(fields: [billId], references: [id], onDelete: SetNull)
+  reopenedFromBillId   String?             // same purpose as Order.reopenedFromBillId — a voided bill's sessions get unlinked here, marking them correctable regardless of status
+  reopenedFromBill     Bill?               @relation("GamingSessionReopenedFrom", fields: [reopenedFromBillId], references: [id], onDelete: SetNull)
   playerLabel          String?             // optional display label ("Player 3") for staff UI only, not used in billing
   halfHourRateSnapshot Int                 // paise, 0-30 min slab rate — snapshotted at session start, never re-read live
   hourlyRateSnapshot   Int                 // paise, 31-60 min slab rate — snapshotted at session start, never re-read live
@@ -195,6 +198,10 @@ model GamingSession {
   startTime            DateTime            @default(now())
   endTime              DateTime?
   status               GamingSessionStatus @default(ACTIVE)
+  voidedAt             DateTime?           // a mistakenly-recorded or wrongly-rated session, voided rather than edited — same reasoning as OrderItem. See Phase 19.
+  voidReason           String?
+  voidedByStaffId      String?
+  voidedByStaff        Staff?              @relation(fields: [voidedByStaffId], references: [id], onDelete: SetNull)
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 
@@ -223,14 +230,14 @@ model MenuItem {
 }
 
 model InventoryItem {
-  id               String        @id @default(uuid())
-  name             String
-  unit             InventoryUnit
-  stockQuantity    Decimal       @default(0) // supports fractional kg/l
-  reorderThreshold Decimal       @default(0)
-  costPerUnit      Int           // paise, latest known cost
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  id                String        @id @default(uuid())
+  name              String
+  unit              InventoryUnit
+  stockQuantity     Decimal       @default(0) // supports fractional kg/l
+  reorderThreshold  Decimal       @default(0)
+  costPerUnit       Int           // paise, latest known cost
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
   recipeIngredients  RecipeIngredient[]
   purchaseOrderItems PurchaseOrderItem[]
@@ -351,22 +358,24 @@ model SmsLog {
 // ─────────────────────────────────────────────
 
 model Order {
-  id               String        @id @default(uuid())
-  tableId          String?       // null for PARCEL orders — see orderType
-  table            Table?        @relation(fields: [tableId], references: [id], onDelete: Restrict)
-  orderType        OrderType     @default(DINE_IN)
-  dailyOrderNumber Int           @default(1) // resets to 1 after "Close Day" (Phase 13) — see generation logic below, NOT the same as Bill.invoiceNumber
-  customerId       String?
-  customer         Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  staffId          String
-  staff            Staff         @relation(fields: [staffId], references: [id], onDelete: Restrict)
-  billId           String?
-  bill             Bill?         @relation(fields: [billId], references: [id], onDelete: SetNull)
-  status           OrderStatus   @default(OPEN)
-  kitchenStatus    KitchenStatus @default(PENDING)
-  boardClearedAt   DateTime?     // set by the end-of-day "Close Day" action — hides this order from the live order tracker without touching status/kitchenStatus, which stay as the real historical record
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  id         String      @id @default(uuid())
+  tableId    String?     // null for PARCEL orders — see orderType
+  table      Table?      @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  orderType  OrderType   @default(DINE_IN)
+  dailyOrderNumber Int   // resets to 1 after "Close Day" (Phase 13) — see generation logic below, NOT the same as Bill.invoiceNumber
+  customerId String?
+  customer   Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  staffId    String
+  staff      Staff       @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  billId     String?
+  bill       Bill?       @relation(fields: [billId], references: [id], onDelete: SetNull)
+  reopenedFromBillId String? // set when a bill void unlinks this order — the marker that puts item-void into "correction mode" (kitchenStatus no longer gates it). Kept permanently as a historical trail, not cleared on rebilling. See Phase 19.
+  reopenedFromBill   Bill?   @relation("OrderReopenedFrom", fields: [reopenedFromBillId], references: [id], onDelete: SetNull)
+  status     OrderStatus @default(OPEN)
+  kitchenStatus KitchenStatus @default(PENDING)
+  boardClearedAt DateTime? // set by the end-of-day "Close Day" action — hides this order from the live order tracker without touching status/kitchenStatus, which stay as the real historical record
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
 
   items OrderItem[]
 
@@ -378,56 +387,58 @@ model Order {
 }
 
 model OrderItem {
-  id                 String    @id @default(uuid())
-  orderId            String
-  order              Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  menuItemId         String
-  menuItem           MenuItem  @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
-  quantity           Int
-  priceSnapshot      Int       // paise, MenuItem.price at time of order — never re-read live price for historical orders
-  gstPercentSnapshot Decimal   // MenuItem.gstPercent (or BusinessProfile.defaultGstPercent fallback) at time of order — frozen, same reasoning as priceSnapshot
-  voidedAt           DateTime? // a mistaken line item, voided rather than deleted — excluded from billing calc and the kitchen board once set. Only allowed while the parent Order's kitchenStatus is still PENDING. See Phase 19.
-  voidReason         String?
-  voidedByStaffId    String?
-  voidedByStaff      Staff?    @relation(fields: [voidedByStaffId], references: [id], onDelete: SetNull)
-  createdAt          DateTime  @default(now())
+  id                String   @id @default(uuid())
+  orderId           String
+  order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId        String
+  menuItem          MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
+  quantity          Int
+  priceSnapshot     Int      // paise, MenuItem.price at time of order — never re-read live price for historical orders
+  gstPercentSnapshot Decimal // MenuItem.gstPercent (or BusinessProfile.defaultGstPercent fallback) at time of order — frozen, same reasoning as priceSnapshot
+  voidedAt          DateTime? // a mistaken line item, voided rather than deleted — excluded from billing calc and the kitchen board once set. Only allowed while the parent Order's kitchenStatus is still PENDING. See Phase 19.
+  voidReason        String?
+  voidedByStaffId   String?
+  voidedByStaff     Staff?   @relation(fields: [voidedByStaffId], references: [id], onDelete: SetNull)
+  createdAt         DateTime @default(now())
 
   @@index([orderId])
 }
 
 model Bill {
-  id                 String        @id @default(uuid())
-  invoiceNumber      Int           // plain sequential 1, 2, 3... resets to 1 every financial year (see financialYear) — NOT globally unique alone, see @@unique below
-  financialYear      String        // e.g. "2025-26" — Indian financial year (1 Apr - 31 Mar), computed in billing.service.mjs at bill creation
-  tableId            String?       // null for PARCEL bills — see orderType
-  table              Table?        @relation(fields: [tableId], references: [id], onDelete: Restrict)
-  orderType          OrderType     @default(DINE_IN) // mirrors the linked Order(s)' type — kept explicit here rather than derived via join, since it's read on nearly every bill list/receipt render
-  customerId         String?
-  customer           Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  staffId            String
-  staff              Staff         @relation(fields: [staffId], references: [id], onDelete: Restrict)
-  foodTotal          Int           @default(0) // paise
-  gamingTotal        Int           @default(0) // paise
-  cgstAmount         Int           @default(0) // paise — half of total GST, per BusinessProfile.cgstPercent
-  sgstAmount         Int           @default(0) // paise — half of total GST, per BusinessProfile.sgstPercent
-  discountAmount     Int           @default(0) // paise — manual entry or auto-applied from a matching DiscountRule at bill time
-  discountReason     String?       // e.g. "Happy Hour Gaming", "Manager discount" — always set when discountAmount > 0, never a bare number with no explanation
-  grandTotal         Int           // paise
-  paymentStatus      PaymentStatus @default(UNPAID) // recompute in payment.service.mjs whenever a Payment is added — UNPAID (0 paid), PARTIALLY_PAID (0 < paid < grandTotal), PAID (paid >= grandTotal)
-  voidedAt           DateTime?     // set when a bill is voided instead of edited — see Phase 12 note on why bills are never edited after issue
-  voidReason         String?
-  voidedByStaffId    String?
-  voidedByStaff      Staff?        @relation("VoidedBills", fields: [voidedByStaffId], references: [id], onDelete: SetNull)
-  correctionOfBillId String?       @unique // set on a NEW bill that replaces a voided one — links the correction back to what it's fixing. See Phase 19.
-  correctionOfBill   Bill?         @relation("BillCorrection", fields: [correctionOfBillId], references: [id], onDelete: SetNull)
-  correctedByBill    Bill?         @relation("BillCorrection") // the reverse lookup: "was this voided bill ever corrected, and by which new bill"
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  id              String        @id @default(uuid())
+  invoiceNumber   Int           // plain sequential 1, 2, 3... resets to 1 every financial year (see financialYear) — NOT globally unique alone, see @@unique below
+  financialYear   String        // e.g. "2025-26" — Indian financial year (1 Apr - 31 Mar), computed in billing.service.mjs at bill creation
+  tableId         String?       // null for PARCEL bills — see orderType
+  table           Table?        @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  orderType       OrderType     @default(DINE_IN) // mirrors the linked Order(s)' type — kept explicit here rather than derived via join, since it's read on nearly every bill list/receipt render
+  customerId      String?
+  customer        Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  staffId         String
+  staff           Staff         @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  foodTotal       Int           @default(0) // paise
+  gamingTotal     Int           @default(0) // paise
+  cgstAmount      Int           @default(0) // paise — half of total GST, per BusinessProfile.cgstPercent
+  sgstAmount      Int           @default(0) // paise — half of total GST, per BusinessProfile.sgstPercent
+  discountAmount  Int           @default(0) // paise — manual entry or auto-applied from a matching DiscountRule at bill time
+  discountReason  String?       // e.g. "Happy Hour Gaming", "Manager discount" — always set when discountAmount > 0, never a bare number with no explanation
+  grandTotal      Int           // paise
+  paymentStatus   PaymentStatus @default(UNPAID) // recompute in payment.service.mjs whenever a Payment is added — UNPAID (0 paid), PARTIALLY_PAID (0 < paid < grandTotal), PAID (paid >= grandTotal)
+  voidedAt        DateTime?     // set when a bill is voided instead of edited — see Phase 12 note on why bills are never edited after issue
+  voidReason      String?
+  voidedByStaffId String?
+  voidedByStaff   Staff?        @relation("VoidedBills", fields: [voidedByStaffId], references: [id], onDelete: SetNull)
+  correctionOfBillId String?    @unique // set on a NEW bill that replaces a voided one — links the correction back to what it's fixing. See Phase 19.
+  correctionOfBill   Bill?      @relation("BillCorrection", fields: [correctionOfBillId], references: [id], onDelete: SetNull)
+  correctedByBill    Bill?      @relation("BillCorrection") // the reverse lookup: "was this voided bill ever corrected, and by which new bill"
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   orders         Order[]
   gamingSessions GamingSession[]
   payments       Payment[]
   refunds        Refund[]
+  reopenedOrders Order[]         @relation("OrderReopenedFrom") // orders that were unlinked from THIS bill when it was voided — the correction trail
+  reopenedGamingSessions GamingSession[] @relation("GamingSessionReopenedFrom")
 
   @@unique([invoiceNumber, financialYear])
   @@index([tableId])
@@ -494,27 +505,60 @@ model PurchasePayment {
 // Singleton — always exactly one row. Fetch via findFirst(), not by a
 // known id, so the app doesn't hardcode a specific row's id anywhere.
 model BusinessProfile {
-  id                             String   @id @default(uuid())
-  businessName                   String
-  address                        String?
-  phone                          String?
-  email                          String?
-  gstin                          String?  // GSTIN, printed on every bill once set
-  fssaiNumber                    String?  // food license number, common requirement for Indian food businesses
-  logoUrl                        String?  // Cloudinary URL
-  receiptFooterNote              String?  // e.g. "Thank you for visiting Cafe Woody's!"
-  defaultGstPercent              Decimal  @default(5) // fallback total GST % (CGST+SGST combined) used only when a MenuItem or Zone doesn't specify its own rate — NOT the rate for everything. See MenuItem.gstPercent / Zone.gstPercent.
-  gamingGracePeriodMinutes       Int      @default(5) // forgiveness window applied at each 30-min slab boundary when closing a gaming session — see Phase 12
-  orderCancellationWindowSeconds Int      @default(300) // how long after submission staff can void a just-placed order before it's treated as final — see Phase 9 Step 7 / Phase 18
-  printerIpAddress               String?  // WiFi thermal printer's local IP, e.g. "192.168.1.123" — set from the counter app's Settings screen, read by the native print plugin. Phase 14.
-  pricesIncludeTax               Boolean  @default(false) // global, not per-item — if true, MenuItem.price/gaming rates are treated as tax-inclusive and GST is extracted from within the price rather than added on top. See Phase 16.
-  thermalPaperWidthMm            Int      @default(80) // free-form roll width in mm, not a fixed preset — any value the client's printer actually uses. See Phase 18.
-  thermalCharsPerLineOverride    Int?     // manual override for character-width-per-line if the auto formula (~0.6 chars/mm) doesn't match the printer's actual font/spacing — null means use the auto formula
-  upiId                          String?  // e.g. "cafewoodys@okicici" — used to generate amount-embedded UPI QR codes on bills
-  upiPayeeName                   String?  // display name shown in the customer's UPI app during payment
-  autoMarkBillsPaidInFull        Boolean  @default(false) // if true, billing defaults to instantly recording full payment — overridable per bill. See Phase 16.
-  createdAt                      DateTime @default(now())
-  updatedAt                      DateTime @updatedAt
+  id                String   @id @default(uuid())
+  businessName      String
+  address           String?
+  phone             String?
+  email             String?
+  gstin             String?  // GSTIN, printed on every bill once set
+  fssaiNumber       String?  // food license number, common requirement for Indian food businesses
+  logoUrl           String?  // Cloudinary URL
+  receiptFooterNote String?  // e.g. "Thank you for visiting Cafe Woody's!"
+  defaultGstPercent Decimal  @default(5) // fallback total GST % (CGST+SGST combined) used only when a MenuItem or Zone doesn't specify its own rate — NOT the rate for everything. See MenuItem.gstPercent / Zone.gstPercent.
+  gamingGracePeriodMinutes Int @default(5) // forgiveness window applied at each 30-min slab boundary when closing a gaming session — see Phase 12
+  orderCancellationWindowSeconds Int @default(300) // how long after submission staff can void a just-placed order before it's treated as final — see Phase 9 Step 7 / Phase 18
+  pricesIncludeTax Boolean @default(false) // global, not per-item — if true, MenuItem.price/gaming rates are treated as tax-inclusive and GST is extracted from within the price rather than added on top. See Phase 16.
+  upiId String? // e.g. "cafewoodys@okicici" — used to generate amount-embedded UPI QR codes on bills
+  upiPayeeName String? // display name shown in the customer's UPI app during payment
+  autoMarkBillsPaidInFull Boolean @default(false) // if true, billing defaults to instantly recording full payment — overridable per bill. See Phase 16.
+  alwaysSaveAndPrint Boolean @default(false) // if true, Save Bill automatically triggers the customer receipt print immediately after commit — no separate Print tap needed. See Phase 22.
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────
+// Printers (Phase 20) — deliberately separate from BusinessProfile.
+// There can be more than one printer (a billing printer and a kitchen
+// printer, potentially on different devices/connections entirely), so
+// this could never have stayed as flat fields on a singleton anyway.
+// ─────────────────────────────────────────────
+
+enum PrinterPurpose {
+  BILLING // the customer-facing bill/receipt printer
+  KITCHEN // KOT printer — see Phase 20 Step 4
+}
+
+enum PrinterConnectionType {
+  TCP             // WiFi/LAN, IP:port
+  USB             // native USB (Android USB Host, or a PC's OS-driver printer)
+  BLUETOOTH
+  SYSTEM_DEFAULT  // PC connector (Phase 18) — whatever the OS's own default printer is
+}
+
+model PrinterConfig {
+  id                    String                @id @default(uuid())
+  name                  String                // e.g. "Counter Printer", "Kitchen Printer"
+  purpose               PrinterPurpose
+  connectionType        PrinterConnectionType @default(TCP)
+  ipAddress             String?               // for TCP
+  paperWidthMm          Int                   @default(80) // free-form, see Phase 18 Step 2 — same auto-formula/override logic, just scoped per printer now instead of business-wide
+  charsPerLineOverride  Int?
+  isEnabled             Boolean               @default(true) // e.g. the kitchen printer can be turned off entirely if the café is using the on-screen Order Board instead — see Phase 20 Step 4
+  isDefault             Boolean               @default(false) // only one PrinterConfig per purpose should be true — enforced in printer.service.mjs, not a DB constraint (Prisma doesn't support a clean partial-unique index for this)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@index([purpose])
 }
 
 // An automatic discount rule (e.g. "Happy Hour Gaming 5-7pm, 20% off").
@@ -539,4 +583,16 @@ model DiscountRule {
 
   @@index([isActive])
   @@index([zoneId])
+}
+
+// Singleton, like BusinessProfile — fetch via findFirst(). Deliberately
+// separate from PrinterConfig: PrinterConfig is "which printer, what
+// connection"; this is "when should a kitchen-style slip print at
+// all." Phase 21.
+model KitchenPrintSettings {
+  id                  String   @id @default(uuid())
+  printOnEveryOrder   Boolean  @default(false) // print immediately when ANY order (dine-in or parcel) is submitted — covers waiters' dine-in orders and single-screen/no-kitchen-display setups
+  printWithParcelBill Boolean  @default(false) // additionally print a kitchen-style slip when a parcel bill is generated, independent of printOnEveryOrder
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }
