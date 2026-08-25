@@ -7,7 +7,8 @@ export const kitchenPrintSettingsRepository = {
       settings = await prisma.kitchenPrintSettings.create({
         data: {
           printOnEveryOrder: false,
-          printWithParcelBill: false
+          printWithParcelBill: false,
+          paperOnlyKitchenTracking: false
         }
       });
     }
@@ -20,7 +21,8 @@ export const kitchenPrintSettingsRepository = {
       where: { id: existing.id },
       data: {
         ...(data.printOnEveryOrder !== undefined && { printOnEveryOrder: Boolean(data.printOnEveryOrder) }),
-        ...(data.printWithParcelBill !== undefined && { printWithParcelBill: Boolean(data.printWithParcelBill) })
+        ...(data.printWithParcelBill !== undefined && { printWithParcelBill: Boolean(data.printWithParcelBill) }),
+        ...(data.paperOnlyKitchenTracking !== undefined && { paperOnlyKitchenTracking: Boolean(data.paperOnlyKitchenTracking) })
       }
     });
   }

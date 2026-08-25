@@ -25,7 +25,7 @@ async function printReceiptText(text) {
               font-family: monospace;
               font-size: 12px;
               line-height: 1.2;
-              white-space: pre;
+              white-space: pre-wrap;
               margin: 0;
               padding: 10px;
               width: 100%;
@@ -34,7 +34,15 @@ async function printReceiptText(text) {
             }
           </style>
         </head>
-        <body>${text.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</body>
+        <body><pre style="font-family: monospace; font-size: 12px; margin:0;">${
+          text
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\[QR\]:\s*(upi:\/\/[^\s\n]+)/g, (_, uri) => {
+              const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(uri)}`;
+              return `</pre><div style="text-align:center; margin: 12px 0;"><img src="${qrUrl}" width="180" height="180" style="display:inline-block; margin:0 auto;" /></div><pre style="font-family: monospace; font-size: 12px; margin:0;">`;
+            })
+        }</pre></body>
       </html>
     `;
 

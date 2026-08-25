@@ -210,6 +210,23 @@ export function PrintersSettingsForm() {
               {kitchenSettings.printWithParcelBill ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
             </button>
           </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', backgroundColor: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+            <div>
+              <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-brand)' }}>
+                Paper-Only Kitchen KOT Tracking (No Kitchen Display Screen)
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+                Rely purely on printed KOTs — kitchen readiness check is skipped before billing
+              </div>
+            </div>
+            <button
+              onClick={() => handleUpdateKitchenSetting('paperOnlyKitchenTracking', !kitchenSettings.paperOnlyKitchenTracking)}
+              style={{ border: 'none', background: 'none', cursor: 'pointer', color: kitchenSettings.paperOnlyKitchenTracking ? 'var(--color-success)' : 'var(--color-text-secondary)' }}
+            >
+              {kitchenSettings.paperOnlyKitchenTracking ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
+            </button>
+          </div>
         </div>
       </div>
 

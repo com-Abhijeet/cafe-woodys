@@ -5,6 +5,7 @@ import { CustomerResolveField } from '../../customers/components/CustomerResolve
 import { KitchenStatusWarningModal } from './KitchenStatusWarningModal';
 import { PaymentModal } from './PaymentModal';
 import { QuickConfigModal } from './QuickConfigModal';
+import { UpiQrCode } from './UpiQrCode';
 import { CategorySidebar } from '../../tables/components/CategorySidebar';
 import { MenuItemGrid } from '../../tables/components/MenuItemGrid';
 import { useMenu } from '../../menu/hooks/useMenu';
@@ -262,22 +263,39 @@ export function BillingView({ tableId, initialBill = null, onBack, onBillSettled
       setShowKitchenModal(false);
       setShowPaymentModal(false);
 
-      // Always print KOT slip for parcel/takeaway bills if kitchen print settings are enabled
+      // Resolve print automation settings for customer receipt and KOT slip
       const isParcel = savedBill.orderType === 'PARCEL' || !savedBill.table;
+      let shouldPrintReceipt = Boolean(businessProfile?.alwaysSaveAndPrint);
+      let shouldPrintKot = false;
+
       if (isParcel) {
         try {
           const ksRes = await apiClient('/kitchen-print-settings').catch(() => null);
-          if (ksRes?.printWithParcelBill || ksRes?.printOnEveryOrder) {
-            printKitchenSlip(savedBill).catch((err) => console.error('KOT auto-print error:', err));
-          }
-        } catch {}
+          shouldPrintKot = Boolean(ksRes?.printWithParcelBill || ksRes?.printOnEveryOrder);
+        } catch (e) {
+          console.warn('Failed to fetch kitchen print settings:', e);
+        }
       }
 
-      if (businessProfile?.alwaysSaveAndPrint) {
+      if (shouldPrintReceipt && shouldPrintKot && isParcel) {
+        try {
+          await printReceipt(savedBill);
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          await printKitchenSlip(savedBill);
+        } catch (pErr) {
+          console.error('Dual slip auto-print error:', pErr);
+        }
+      } else if (shouldPrintReceipt) {
         try {
           await printReceipt(savedBill);
         } catch (pErr) {
-          console.error('Auto-print error:', pErr);
+          console.error('Receipt auto-print error:', pErr);
+        }
+      } else if (shouldPrintKot) {
+        try {
+          await printKitchenSlip(savedBill);
+        } catch (pErr) {
+          console.error('KOT auto-print error:', pErr);
         }
       }
 
@@ -713,6 +731,17 @@ export function BillingView({ tableId, initialBill = null, onBack, onBillSettled
                 <span>GRAND TOTAL:</span>
                 <span>₹{grandTotalRs}</span>
               </div>
+
+              {businessProfile?.upiId && (
+                <div style={{ marginTop: '12px', borderTop: '1px dashed #111', paddingTop: '8px' }}>
+                  <UpiQrCode
+                    upiId={businessProfile.upiId}
+                    upiPayeeName={businessProfile.upiPayeeName || businessProfile.businessName}
+                    amountPaise={remainingPaise > 0 ? remainingPaise : grandTotalPaise}
+                    note={bill?.invoiceNumber ? `Bill #${bill.invoiceNumber}` : 'Cafe Woodys'}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>

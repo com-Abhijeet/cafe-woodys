@@ -90,6 +90,11 @@ export const billingService = {
   async checkKitchenStatus(targetId) {
     if (!targetId) return [];
 
+    const ksSetting = await prisma.kitchenPrintSettings.findFirst();
+    if (ksSetting?.paperOnlyKitchenTracking) {
+      return []; // Paper-only kitchen tracking: skip kitchen readiness check before billing
+    }
+
     let openOrders = [];
     const table = await prisma.table.findUnique({ where: { id: targetId } });
     if (table) {
@@ -545,6 +550,22 @@ export const billingService = {
             paidAt: now
           }
         });
+      }
+
+      if (table) {
+        const remainingOpenOrdersCount = await tx.order.count({
+          where: { tableId: targetId, status: 'OPEN', id: { notIn: openOrders.map((o) => o.id) } }
+        });
+        const remainingActiveSessionsCount = await tx.gamingSession.count({
+          where: { tableId: targetId, status: 'ACTIVE', id: { notIn: unbilledSessions.map((s) => s.id) } }
+        });
+
+        if (initialPaymentStatus === 'PAID' || (remainingOpenOrdersCount === 0 && remainingActiveSessionsCount === 0)) {
+          await tx.table.update({
+            where: { id: targetId },
+            data: { status: 'FREE' }
+          });
+        }
       }
 
       return bill;

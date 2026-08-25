@@ -22,18 +22,21 @@ export async function printNative(formattedText, printerConfig = {}) {
       return { success: false, error: 'Thermal printer ionic plugin not available on this platform' };
     }
 
+    // Convert [QR]: <uri> placeholder into native thermal printer ESC/POS <qr> tag
+    const preparedText = formattedText.replace(/\[QR\]:\s*(upi:\/\/[^\s\n]+)/g, (_, uri) => `<qr size="6">${uri}</qr>`);
+
     // Step 8: Support Native Android USB printing directly via thermal-printer-ionic plugin (no RawBT needed!)
     const payload = connectionType === 'usb'
       ? {
           type: 'usb',
-          text: formattedText
+          text: preparedText
         }
       : {
           type: 'tcp',
           address: ip,
           port: 9100,
           id: printerConfig.id || 'counter-printer',
-          text: formattedText
+          text: preparedText
         };
 
     // 6-Second Timeout Safeguard so unreachable printers never hang checkout screen
