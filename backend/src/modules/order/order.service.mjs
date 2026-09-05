@@ -3,6 +3,8 @@ import { menuItemRepository } from '../menu-item/menu-item.repository.mjs';
 import { tableService } from '../table/table.service.mjs';
 import { tableRepository } from '../table/table.repository.mjs';
 import { businessProfileService } from '../business-profile/business-profile.service.mjs';
+import { taxSettingsService } from '../tax-settings/tax-settings.service.mjs';
+import { orderSettingsService } from '../order-settings/order-settings.service.mjs';
 import { broadcastOrderCreated, broadcastTableUpdate, broadcastKitchenStatusUpdated, broadcastOrderBoardCleared } from '../../realtime/broadcast.mjs';
 import { NotFoundError } from '../../shared/errors/not-found-error.mjs';
 import { ValidationError } from '../../shared/errors/validation-error.mjs';
@@ -179,8 +181,8 @@ export const orderService = {
     }
 
     // Step 6: Admin-configurable order cancellation window in seconds
-    const profile = await businessProfileService.getProfile();
-    const cancellationWindowSecs = profile?.orderCancellationWindowSeconds ?? 300;
+    const orderSettings = await orderSettingsService.getSettings();
+    const cancellationWindowSecs = orderSettings?.orderCancellationWindowSeconds ?? 300;
 
     const createdTime = new Date(order.createdAt).getTime();
     const now = new Date().getTime();
@@ -214,8 +216,8 @@ export const orderService = {
       }
     }
 
-    const profile = await businessProfileService.getProfile();
-    const defaultGst = profile ? profile.defaultGstPercent : 5;
+    const taxSettings = await taxSettingsService.getSettings();
+    const defaultGst = taxSettings ? Number(taxSettings.defaultGstPercent) : 5;
 
     const menuItemIds = items.map((i) => i.menuItemId);
     const dbMenuItems = await menuItemRepository.findByIds(menuItemIds);

@@ -2,6 +2,8 @@ import { gamingSessionRepository } from './gaming-session.repository.mjs';
 import { tableService } from '../table/table.service.mjs';
 import { tableRepository } from '../table/table.repository.mjs';
 import { businessProfileService } from '../business-profile/business-profile.service.mjs';
+import { taxSettingsService } from '../tax-settings/tax-settings.service.mjs';
+import { gamingSettingsService } from '../gaming-settings/gaming-settings.service.mjs';
 import { broadcastGamingSessionUpdate, broadcastTableUpdate } from '../../realtime/broadcast.mjs';
 import { NotFoundError } from '../../shared/errors/not-found-error.mjs';
 import { ValidationError } from '../../shared/errors/validation-error.mjs';
@@ -57,8 +59,8 @@ export const gamingSessionService = {
       throw new NotFoundError('Table not found', 'TABLE_NOT_FOUND');
     }
 
-    const profile = await businessProfileService.getProfile();
-    const graceMinutes = profile?.gamingGracePeriodMinutes ?? 5;
+    const gamingSettings = await gamingSettingsService.getSettings();
+    const graceMinutes = gamingSettings?.gamingGracePeriodMinutes ?? 5;
 
     const sessions = await gamingSessionRepository.findActiveByTableId(tableId);
     const now = new Date();
@@ -101,8 +103,8 @@ export const gamingSessionService = {
       );
     }
 
-    const profile = await businessProfileService.getProfile();
-    const defaultGst = profile ? profile.defaultGstPercent : 5;
+    const taxSettings = await taxSettingsService.getSettings();
+    const defaultGst = taxSettings ? Number(taxSettings.defaultGstPercent) : 5;
     const gstPercentSnapshot = table.zone?.gstPercent != null ? Number(table.zone.gstPercent) : defaultGst;
 
     const halfHourRateSnapshot = table.effectiveHalfHourRate || 0;

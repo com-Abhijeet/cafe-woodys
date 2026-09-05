@@ -1,4 +1,5 @@
 import { customerService } from './customer.service.mjs';
+import { loyaltyTransactionService } from './loyalty-transaction.service.mjs';
 
 export const customerController = {
   async searchCustomers(req, res, next) {
@@ -35,6 +36,26 @@ export const customerController = {
       const { name, phone, notes } = req.body;
       const updated = await customerService.updateCustomer(req.params.id, { name, phone, notes });
       return res.json({ data: updated });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async getLoyalty(req, res, next) {
+    try {
+      const loyaltyData = await loyaltyTransactionService.getCustomerLoyalty(req.params.id);
+      return res.json({ data: loyaltyData });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async adjustLoyaltyPoints(req, res, next) {
+    try {
+      const staffId = req.user.id;
+      const { pointsDelta, note } = req.body;
+      const txn = await loyaltyTransactionService.createManualAdjustment(req.params.id, staffId, { pointsDelta, note });
+      return res.status(201).json({ data: txn });
     } catch (err) {
       next(err);
     }

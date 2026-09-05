@@ -1,10 +1,16 @@
 import prisma from '../../shared/db/client.mjs';
 import { billingRepository } from './billing.repository.mjs';
-import { tableService } from '../table/table.service.mjs';
+import { tableService, canTableBeFreed } from '../table/table.service.mjs';
 import { discountRuleRepository } from '../discount-rule/discount-rule.repository.mjs';
 import { calculateSlotCharge } from '../gaming-session/gaming-session.service.mjs';
 import { businessProfileService } from '../business-profile/business-profile.service.mjs';
+import { taxSettingsService } from '../tax-settings/tax-settings.service.mjs';
+import { paymentSettingsService } from '../payment-settings/payment-settings.service.mjs';
+import { gamingSettingsService } from '../gaming-settings/gaming-settings.service.mjs';
 import { smsService } from '../sms/sms.service.mjs';
+import { loyaltySettingsRepository } from '../loyalty-settings/loyalty-settings.repository.mjs';
+import { loyaltyTransactionRepository } from '../customer/loyalty-transaction.repository.mjs';
+import { loyaltyTransactionService } from '../customer/loyalty-transaction.service.mjs';
 import { broadcastBillCreated, broadcastTableUpdate } from '../../realtime/broadcast.mjs';
 import { NotFoundError } from '../../shared/errors/not-found-error.mjs';
 import { ValidationError } from '../../shared/errors/validation-error.mjs';
@@ -171,9 +177,10 @@ export const billingService = {
       throw new NotFoundError('Table or Order not found for billing preview', 'NOT_FOUND');
     }
 
-    const profile = await businessProfileService.getProfile();
-    const graceMinutes = profile?.gamingGracePeriodMinutes ?? 5;
-    const pricesIncludeTax = Boolean(profile?.pricesIncludeTax);
+    const taxSettings = await taxSettingsService.getSettings();
+    const gamingSettings = await gamingSettingsService.getSettings();
+    const graceMinutes = gamingSettings?.gamingGracePeriodMinutes ?? 5;
+    const pricesIncludeTax = Boolean(taxSettings?.pricesIncludeTax);
     const now = new Date();
 
     const lines = [];
@@ -281,8 +288,8 @@ export const billingService = {
       }
     }
 
-    const profile = await businessProfileService.getProfile();
-    const graceMinutes = profile?.gamingGracePeriodMinutes ?? 5;
+    const gamingSettings = await gamingSettingsService.getSettings();
+    const graceMinutes = gamingSettings?.gamingGracePeriodMinutes ?? 5;
 
     const now = new Date();
     let foodTotal = 0;
@@ -358,7 +365,8 @@ export const billingService = {
       autoPayMethod = null,
       payment = null,
       ignoreKitchenWarning = false,
-      correctionOfBillId = null
+      correctionOfBillId = null,
+      loyaltyRedemptionRuleId = null,
     } = billData;
     let table = await prisma.table.findUnique({ where: { id: targetId } });
     let singleOrder = null;
@@ -388,9 +396,11 @@ export const billingService = {
       throw new ConflictError('Billing checkout is already in progress for this table. Please wait.', 'BILLING_IN_PROGRESS');
     }
 
-    const profile = await businessProfileService.getProfile();
-    const graceMinutes = profile?.gamingGracePeriodMinutes ?? 5;
-    const pricesIncludeTax = Boolean(profile?.pricesIncludeTax);
+    const taxSettings = await taxSettingsService.getSettings();
+    const paymentSettings = await paymentSettingsService.getSettings();
+    const gamingSettings = await gamingSettingsService.getSettings();
+    const graceMinutes = gamingSettings?.gamingGracePeriodMinutes ?? 5;
+    const pricesIncludeTax = Boolean(taxSettings?.pricesIncludeTax);
     const now = new Date();
 
     const createdBill = await prisma.$transaction(async (tx) => {
@@ -470,13 +480,55 @@ export const billingService = {
         throw new ValidationError('No unbilled orders or gaming sessions found to bill', 'NOTHING_TO_BILL');
       }
 
+      // ── Loyalty Redemption Calculation ──
+      const effectiveCustomerId = customerId || openOrders[0]?.customerId || null;
+      let loyaltyDiscountAmount = 0;
+      let loyaltyPointsRedeemed = 0;
+      let selectedRedemptionRuleId = null;
+
+      if (loyaltyRedemptionRuleId) {
+        const loyaltySettings = await loyaltySettingsRepository.getSettings(tx);
+        if (!loyaltySettings.isEnabled) {
+          throw new ValidationError('Loyalty program is not currently enabled', 'LOYALTY_DISABLED');
+        }
+        if (!effectiveCustomerId) {
+          throw new ValidationError('A customer must be attached to redeem loyalty points', 'CUSTOMER_REQUIRED_FOR_LOYALTY');
+        }
+        const currentBalance = await loyaltyTransactionRepository.getCustomerBalance(effectiveCustomerId, tx);
+        const rule = await tx.loyaltyRedemptionRule.findUnique({ where: { id: loyaltyRedemptionRuleId } });
+        if (!rule || !rule.isActive) {
+          throw new ValidationError('Selected loyalty redemption rule is invalid or inactive', 'INVALID_REDEMPTION_RULE');
+        }
+        if (rule.pointsRequired > currentBalance) {
+          throw new ValidationError(`Insufficient points balance (${currentBalance} available, ${rule.pointsRequired} required)`, 'INSUFFICIENT_LOYALTY_POINTS');
+        }
+
+        const preLoyaltyBase = Math.max(0, grossSubtotal - discountAmount);
+        let calculatedDiscount = 0;
+        if (rule.discountType === 'PERCENTAGE') {
+          calculatedDiscount = Math.round((preLoyaltyBase * Number(rule.discountValue)) / 100);
+        } else if (rule.discountType === 'FLAT') {
+          calculatedDiscount = Number(rule.discountValue);
+        }
+
+        if (loyaltySettings.maxRedemptionPercentOfBill !== null) {
+          const maxCap = Math.round((preLoyaltyBase * loyaltySettings.maxRedemptionPercentOfBill) / 100);
+          calculatedDiscount = Math.min(calculatedDiscount, maxCap);
+        }
+
+        loyaltyDiscountAmount = Math.min(calculatedDiscount, preLoyaltyBase);
+        loyaltyPointsRedeemed = rule.pointsRequired;
+        selectedRedemptionRuleId = rule.id;
+      }
+
+      const totalDiscount = discountAmount + loyaltyDiscountAmount;
       let totalCgst = 0;
       let totalSgst = 0;
 
       for (const line of lines) {
         let lineAmount = line.subtotal;
-        if (discountAmount > 0 && grossSubtotal > 0) {
-          const lineDiscount = Math.round((line.subtotal / grossSubtotal) * discountAmount);
+        if (totalDiscount > 0 && grossSubtotal > 0) {
+          const lineDiscount = Math.round((line.subtotal / grossSubtotal) * totalDiscount);
           lineAmount = Math.max(0, line.subtotal - lineDiscount);
         }
         const { cgst, sgst } = calculateLineAmounts(lineAmount, line.gstPercent, pricesIncludeTax);
@@ -485,15 +537,15 @@ export const billingService = {
       }
 
       const grandTotal = pricesIncludeTax
-        ? Math.max(0, grossSubtotal - discountAmount)
-        : Math.max(0, grossSubtotal - discountAmount) + totalCgst + totalSgst;
+        ? Math.max(0, grossSubtotal - totalDiscount)
+        : Math.max(0, grossSubtotal - totalDiscount) + totalCgst + totalSgst;
 
       const { invoiceNumber, financialYear } = await generateInvoiceNumber(tx, now);
       const paymentObj = payment || billData?.payment;
       let initialPaymentStatus = 'UNPAID';
       if (paymentObj) {
         initialPaymentStatus = paymentObj.amount >= grandTotal ? 'PAID' : 'PARTIALLY_PAID';
-      } else if (autoPayMethod) {
+      } else if (autoPayMethod || paymentSettings?.autoMarkBillsPaidInFull) {
         initialPaymentStatus = 'PAID';
       }
 
@@ -503,18 +555,34 @@ export const billingService = {
           financialYear,
           tableId: table ? targetId : null,
           staffId,
-          customerId: customerId || openOrders[0]?.customerId || null,
+          customerId: effectiveCustomerId,
           foodTotal,
           gamingTotal,
           cgstAmount: totalCgst,
           sgstAmount: totalSgst,
           discountAmount,
           discountReason: discountAmount > 0 ? (discountReason?.trim() || 'Staff Discount') : null,
+          loyaltyDiscountAmount,
+          loyaltyPointsRedeemed,
+          loyaltyRedemptionRuleId: selectedRedemptionRuleId,
           grandTotal,
           paymentStatus: initialPaymentStatus,
           correctionOfBillId: correctionOfBillId || null
         }
       });
+
+      // Record REDEEMED transaction if points spent
+      if (loyaltyPointsRedeemed > 0 && effectiveCustomerId) {
+        await tx.loyaltyTransaction.create({
+          data: {
+            customerId: effectiveCustomerId,
+            billId: bill.id,
+            type: 'REDEEMED',
+            pointsDelta: -loyaltyPointsRedeemed,
+            staffId
+          }
+        });
+      }
 
       if (openOrders.length > 0) {
         await tx.order.updateMany({
@@ -553,19 +621,18 @@ export const billingService = {
       }
 
       if (table) {
-        const remainingOpenOrdersCount = await tx.order.count({
-          where: { tableId: targetId, status: 'OPEN', id: { notIn: openOrders.map((o) => o.id) } }
-        });
-        const remainingActiveSessionsCount = await tx.gamingSession.count({
-          where: { tableId: targetId, status: 'ACTIVE', id: { notIn: unbilledSessions.map((s) => s.id) } }
-        });
-
-        if (initialPaymentStatus === 'PAID' || (remainingOpenOrdersCount === 0 && remainingActiveSessionsCount === 0)) {
+        const isFree = await canTableBeFreed(targetId, tx);
+        if (initialPaymentStatus === 'PAID' || isFree) {
           await tx.table.update({
             where: { id: targetId },
             data: { status: 'FREE' }
           });
         }
+      }
+
+      // Credit EARNED points if bill is created directly in PAID status
+      if (initialPaymentStatus === 'PAID') {
+        await loyaltyTransactionService.creditLoyaltyPointsIfEarned(bill, tx);
       }
 
       return bill;
@@ -608,7 +675,10 @@ export const billingService = {
     }
 
     await prisma.$transaction(async (tx) => {
-      // 1. Mark bill as voided
+      // 1. Reverse loyalty transactions (EARNED or REDEEMED)
+      await loyaltyTransactionService.reverseLoyaltyOnVoid(existingBill, tx);
+
+      // 2. Mark bill as voided
       await tx.bill.update({
         where: { id: billId },
         data: {
@@ -618,23 +688,24 @@ export const billingService = {
         }
       });
 
-      // 2. Unlink attached Orders (billId -> null, status -> OPEN)
+      // 3. Unlink attached Orders (billId -> null, status -> OPEN)
       await tx.order.updateMany({
         where: { billId },
         data: { billId: null, status: 'OPEN' }
       });
 
-      // 3. Unlink attached Gaming Sessions (billId -> null)
+      // 4. Unlink attached Gaming Sessions (billId -> null)
       await tx.gamingSession.updateMany({
         where: { billId },
         data: { billId: null }
       });
 
-      // 4. Set table status to OCCUPIED if applicable
+      // 5. Reconcile table status (OCCUPIED if open orders/sessions exist, FREE if clean)
       if (existingBill.tableId) {
+        const isFree = await canTableBeFreed(existingBill.tableId, tx);
         await tx.table.update({
           where: { id: existingBill.tableId },
-          data: { status: 'OCCUPIED' }
+          data: { status: isFree ? 'FREE' : 'OCCUPIED' }
         });
       }
     });
@@ -736,20 +807,20 @@ export const billingService = {
         data: { paymentStatus: newStatus }
       });
 
-      // 5. If fully paid, check if table can be set back to FREE
-      if (newStatus === 'PAID' && existingBill.tableId) {
-        const remainingOpenOrders = await tx.order.count({
-          where: { tableId: existingBill.tableId, status: 'OPEN' }
-        });
-        const remainingActiveSessions = await tx.gamingSession.count({
-          where: { tableId: existingBill.tableId, status: 'ACTIVE' }
-        });
-
-        if (remainingOpenOrders === 0 && remainingActiveSessions === 0) {
-          await tx.table.update({
-            where: { id: existingBill.tableId },
-            data: { status: 'FREE' }
-          });
+      // 5. If fully paid, credit loyalty points if eligible & check if table can be set back to FREE
+      if (newStatus === 'PAID') {
+        const fullBillForEarn = await tx.bill.findUnique({ where: { id: billId } });
+        if (fullBillForEarn) {
+          await loyaltyTransactionService.creditLoyaltyPointsIfEarned(fullBillForEarn, tx);
+        }
+        if (existingBill.tableId) {
+          const isFree = await canTableBeFreed(existingBill.tableId, tx);
+          if (isFree) {
+            await tx.table.update({
+              where: { id: existingBill.tableId },
+              data: { status: 'FREE' }
+            });
+          }
         }
       }
 

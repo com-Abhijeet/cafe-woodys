@@ -1,11 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useOrdersBoard } from '../hooks/useOrdersBoard';
 import { useAuth } from '../../../hooks/useAuth';
 import { boardColumnConfig } from '../config/boardConfig';
 import { OrderTicketCard } from './OrderTicketCard';
 import { Button } from '../../../components/ui/Button/Button';
 import { KITCHEN_STATUS_COLUMN_TITLES, formatKitchenStatus } from '../../../lib/labels';
-import { ChefHat, RefreshCw, Volume2, VolumeX, Bell, Sunset, AlertTriangle, ChevronUp, ChevronDown, CheckCircle2, Clock } from 'lucide-react';
+import {
+  ChefHat, RefreshCw, Volume2, VolumeX, Bell, Sunset, AlertTriangle,
+  ChevronUp, ChevronDown, ChevronRight, CheckCircle2, Clock, Maximize2, Minimize2
+} from 'lucide-react';
 import styles from './OrdersBoard.module.css';
 
 export function OrdersBoard() {
@@ -26,11 +29,21 @@ export function OrdersBoard() {
     closeDay
   } = useOrdersBoard();
 
-  // Phase 21 Step 5: Role-Based Vertical Split Board Layout
   const roleConfig = boardColumnConfig[role] || boardColumnConfig.WAITER;
   const [activeSecondaryCol, setActiveSecondaryCol] = useState(null);
 
-  // Close Day Confirmation & Warning State
+  // Fullscreen / KDS Focus Mode State
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Collapsible Status Rows State (Default: PENDING & PREPARING expanded, READY/SERVED collapsed if empty)
+  const [collapsedRows, setCollapsedRows] = useState({
+    PENDING: false,
+    PREPARING: false,
+    READY: false,
+    SERVED: true
+  });
+
+  // Close Day Confirmation State
   const [unresolvedData, setUnresolvedData] = useState(null);
   const [isClosingDay, setIsClosingDay] = useState(false);
   const [closeSuccessToast, setCloseSuccessToast] = useState(null);
@@ -49,6 +62,24 @@ export function OrdersBoard() {
 
   const primaryStatuses = roleConfig.primary || ['PENDING', 'PREPARING', 'READY', 'SERVED'];
   const secondaryStatuses = roleConfig.secondary || [];
+
+  const toggleFullscreen = () => {
+    if (!isFullscreen) {
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+      setIsFullscreen(true);
+    } else {
+      if (document.exitFullscreen && document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+      setIsFullscreen(false);
+    }
+  };
+
+  const toggleRowCollapse = (st) => {
+    setCollapsedRows((prev) => ({ ...prev, [st]: !prev[st] }));
+  };
 
   const handleInitiateCloseDay = async () => {
     setIsClosingDay(true);
@@ -82,8 +113,32 @@ export function OrdersBoard() {
     }
   };
 
+  const containerStyle = isFullscreen
+    ? {
+        position: 'fixed',
+        inset: 0,
+        zIndex: 9999,
+        backgroundColor: 'var(--color-bg)',
+        padding: '16px',
+        height: '100vh',
+        width: '100vw',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-3)'
+      }
+    : {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-3)',
+        height: '100%',
+        boxSizing: 'border-box',
+        overflow: 'hidden',
+        padding: 'var(--space-3)'
+      };
+
   return (
-    <div className={styles.container}>
+    <div style={containerStyle}>
       {/* Toast Alert Banner */}
       {(toastMessage || closeSuccessToast) && (
         <div style={{
@@ -126,6 +181,27 @@ export function OrdersBoard() {
           )}
 
           <button
+            onClick={toggleFullscreen}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 12px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--color-brand)',
+              backgroundColor: isFullscreen ? 'var(--color-brand)' : 'var(--color-bg)',
+              color: isFullscreen ? '#ffffff' : 'var(--color-brand)',
+              fontSize: 'var(--text-xs)',
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+            title="Toggle full screen focus view for Kitchen Display"
+          >
+            {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+            {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen KDS'}
+          </button>
+
+          <button
             onClick={toggleSound}
             style={{
               display: 'inline-flex',
@@ -166,7 +242,7 @@ export function OrdersBoard() {
         </div>
       </div>
 
-      {/* Kanban Board Area */}
+      {/* Main Board Container */}
       {isLoading ? (
         <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>Loading live orders...</p>
       ) : error ? (
@@ -174,47 +250,93 @@ export function OrdersBoard() {
       ) : (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, gap: 'var(--space-3)' }}>
 
-          {/* Phase 21 Step 5: Primary Vertical-Split Columns (Full Height Side-By-Side) */}
+          {/* Stacked Collapsible Rows Section */}
           <div
-            className={styles.kanbanGrid}
             style={{
-              gridTemplateColumns: `repeat(${primaryStatuses.length}, 1fr)`,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 'var(--space-3)',
               flex: 1,
-              minHeight: 0
+              minHeight: 0,
+              overflowY: 'auto',
+              paddingRight: '4px'
             }}
           >
             {primaryStatuses.map((st) => {
               const col = columnsMap[st];
               if (!col) return null;
+              const isCollapsed = Boolean(collapsedRows[st]);
+
               return (
-                <div key={st} className={styles.column}>
-                  <div className={`${styles.columnHeader} ${col.headerClass}`}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span>{col.title}</span>
+                <div
+                  key={st}
+                  style={{
+                    backgroundColor: 'var(--color-surface)',
+                    borderRadius: 'var(--radius-lg)',
+                    border: '1px solid var(--color-border)',
+                    boxShadow: 'var(--shadow-card)',
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column'
+                  }}
+                >
+                  {/* Row Header with Collapse Toggle */}
+                  <div
+                    className={`${styles.columnHeader} ${col.headerClass}`}
+                    onClick={() => toggleRowCollapse(st)}
+                    style={{
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                      padding: '10px 16px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {isCollapsed ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
+                      <span style={{ fontWeight: 800 }}>{col.title}</span>
                     </div>
                     <span className={styles.badge}>{col.orders.length}</span>
                   </div>
 
-                  <div className={styles.cardsList}>
-                    {col.orders.length === 0 ? (
-                      <div className={styles.emptyCol}>No active tickets in {col.title}</div>
-                    ) : (
-                      col.orders.map((ord) => (
-                        <OrderTicketCard
-                          key={ord.id}
-                          order={ord}
-                          onAdvanceStatus={advanceKitchenStatus}
-                          onCancelOrder={cancelOrder}
-                        />
-                      ))
-                    )}
-                  </div>
+                  {/* Expanded Cards Flex Container */}
+                  {!isCollapsed && (
+                    <div
+                      style={{
+                        padding: '12px',
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: '12px',
+                        alignItems: 'flex-start',
+                        overflowY: 'auto',
+                        maxHeight: '440px',
+                        minHeight: '80px',
+                        backgroundColor: 'rgba(0,0,0,0.02)'
+                      }}
+                    >
+                      {col.orders.length === 0 ? (
+                        <div className={styles.emptyCol} style={{ width: '100%', padding: '16px' }}>
+                          No active tickets in {col.title}
+                        </div>
+                      ) : (
+                        col.orders.map((ord) => (
+                          <OrderTicketCard
+                            key={ord.id}
+                            order={ord}
+                            onAdvanceStatus={advanceKitchenStatus}
+                            onCancelOrder={cancelOrder}
+                          />
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
 
-          {/* Phase 21 Step 5: Collapsed Secondary Strip at Bottom (Kitchen View) */}
+          {/* Secondary Strip at Bottom (Completed History) */}
           {secondaryStatuses.length > 0 && (
             <div style={{
               display: 'flex',
@@ -286,7 +408,7 @@ export function OrdersBoard() {
         }}>
           <div style={{
             width: '90%',
-            maxWidth: '480px',
+            maxWidth: '540px',
             backgroundColor: 'var(--color-surface)',
             height: '100%',
             padding: 'var(--space-4)',
@@ -304,9 +426,9 @@ export function OrdersBoard() {
               </Button>
             </div>
 
-            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexWrap: 'wrap', gap: 'var(--space-3)', alignContent: 'flex-start' }}>
               {columnsMap[activeSecondaryCol].orders.length === 0 ? (
-                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', textAlign: 'center', marginTop: '20px' }}>
+                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', textAlign: 'center', marginTop: '20px', width: '100%' }}>
                   No orders in {columnsMap[activeSecondaryCol].title}
                 </p>
               ) : (

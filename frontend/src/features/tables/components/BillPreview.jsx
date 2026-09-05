@@ -8,7 +8,7 @@ export function BillPreview({ table, initialBill = null, onBackToOrdering, onRef
       onBack={onBackToOrdering}
       onBillSettled={(bill) => {
         if (onBillSettled) onBillSettled(bill);
-        else if (onRefreshTable) onRefreshTable();
+        if (onRefreshTable) onRefreshTable(bill);
       }}
     />
   );

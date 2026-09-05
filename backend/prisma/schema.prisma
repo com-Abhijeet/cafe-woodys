@@ -1,6 +1,3 @@
-// Cafe Woody's — Prisma schema
-// Place at: backend/prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -133,6 +130,7 @@ model Staff {
   voidedOrderItems OrderItem[]
   voidedGamingSessions GamingSession[]
   refunds        Refund[]
+  loyaltyTransactions LoyaltyTransaction[]
 }
 
 // ─────────────────────────────────────────────
@@ -339,6 +337,7 @@ model Customer {
   orders  Order[]
   bills   Bill[]
   smsLogs SmsLog[]
+  loyaltyTransactions LoyaltyTransaction[]
 }
 
 model SmsLog {
@@ -430,6 +429,10 @@ model Bill {
   correctionOfBillId String?    @unique // set on a NEW bill that replaces a voided one — links the correction back to what it's fixing. See Phase 19.
   correctionOfBill   Bill?      @relation("BillCorrection", fields: [correctionOfBillId], references: [id], onDelete: SetNull)
   correctedByBill    Bill?      @relation("BillCorrection") // the reverse lookup: "was this voided bill ever corrected, and by which new bill"
+  loyaltyDiscountAmount   Int     @default(0) // paise — the discount from a points redemption, kept SEPARATE from discountAmount so a Happy Hour discount and a loyalty redemption can both apply to the same bill and stay individually auditable
+  loyaltyPointsRedeemed   Int     @default(0) // how many points were spent on this bill, 0 if none — deducted from the customer's balance immediately at Save Bill, not at payment time (see Phase 25)
+  loyaltyRedemptionRuleId String?
+  loyaltyRedemptionRule   LoyaltyRedemptionRule? @relation(fields: [loyaltyRedemptionRuleId], references: [id], onDelete: SetNull)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -437,6 +440,7 @@ model Bill {
   gamingSessions GamingSession[]
   payments       Payment[]
   refunds        Refund[]
+  loyaltyTransactions LoyaltyTransaction[]
   reopenedOrders Order[]         @relation("OrderReopenedFrom") // orders that were unlinked from THIS bill when it was voided — the correction trail
   reopenedGamingSessions GamingSession[] @relation("GamingSessionReopenedFrom")
 
@@ -504,6 +508,11 @@ model PurchasePayment {
 
 // Singleton — always exactly one row. Fetch via findFirst(), not by a
 // known id, so the app doesn't hardcode a specific row's id anywhere.
+// Pure business identity — nothing operational lives here anymore.
+// Every other setting (tax, payment, order workflow, gaming) has its
+// own dedicated model below, split out in Phase 24 specifically so
+// each table holds only what its name suggests, not a grab-bag of
+// unrelated config.
 model BusinessProfile {
   id                String   @id @default(uuid())
   businessName      String
@@ -514,16 +523,44 @@ model BusinessProfile {
   fssaiNumber       String?  // food license number, common requirement for Indian food businesses
   logoUrl           String?  // Cloudinary URL
   receiptFooterNote String?  // e.g. "Thank you for visiting Cafe Woody's!"
-  defaultGstPercent Decimal  @default(5) // fallback total GST % (CGST+SGST combined) used only when a MenuItem or Zone doesn't specify its own rate — NOT the rate for everything. See MenuItem.gstPercent / Zone.gstPercent.
-  gamingGracePeriodMinutes Int @default(5) // forgiveness window applied at each 30-min slab boundary when closing a gaming session — see Phase 12
-  orderCancellationWindowSeconds Int @default(300) // how long after submission staff can void a just-placed order before it's treated as final — see Phase 9 Step 7 / Phase 18
-  pricesIncludeTax Boolean @default(false) // global, not per-item — if true, MenuItem.price/gaming rates are treated as tax-inclusive and GST is extracted from within the price rather than added on top. See Phase 16.
-  upiId String? // e.g. "cafewoodys@okicici" — used to generate amount-embedded UPI QR codes on bills
-  upiPayeeName String? // display name shown in the customer's UPI app during payment
-  autoMarkBillsPaidInFull Boolean @default(false) // if true, billing defaults to instantly recording full payment — overridable per bill. See Phase 16.
-  alwaysSaveAndPrint Boolean @default(false) // if true, Save Bill automatically triggers the customer receipt print immediately after commit — no separate Print tap needed. See Phase 22.
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+}
+
+// Singleton, fetch via findFirst(). Phase 24.
+model TaxSettings {
+  id                String  @id @default(uuid())
+  defaultGstPercent Decimal @default(5) // fallback total GST % (CGST+SGST combined) used only when a MenuItem or Zone doesn't specify its own rate — NOT the rate for everything. See MenuItem.gstPercent / Zone.gstPercent.
+  pricesIncludeTax  Boolean @default(false) // global, not per-item — if true, MenuItem.price/gaming rates are treated as tax-inclusive and GST is extracted from within the price rather than added on top. See Phase 16.
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// Singleton, fetch via findFirst(). Phase 24.
+model PaymentSettings {
+  id                      String  @id @default(uuid())
+  upiId                   String? // e.g. "cafewoodys@okicici" — used to generate amount-embedded UPI QR codes on bills
+  upiPayeeName            String? // display name shown in the customer's UPI app during payment
+  autoMarkBillsPaidInFull Boolean @default(false) // if true, billing defaults to instantly recording full payment — overridable per bill. See Phase 16.
+  alwaysSaveAndPrint      Boolean @default(false) // if true, Save Bill automatically triggers the customer receipt print immediately after commit. See Phase 22.
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+// Singleton, fetch via findFirst(). Phase 24.
+model OrderSettings {
+  id                             String   @id @default(uuid())
+  orderCancellationWindowSeconds Int      @default(300) // how long after submission staff can void a just-placed order before it's treated as final — see Phase 9 Step 7 / Phase 18
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+}
+
+// Singleton, fetch via findFirst(). Phase 24.
+model GamingSettings {
+  id                       String   @id @default(uuid())
+  gamingGracePeriodMinutes Int      @default(5) // forgiveness window applied at each 30-min slab boundary when closing a gaming session — see Phase 12
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 }
 
 // ─────────────────────────────────────────────
@@ -593,6 +630,70 @@ model KitchenPrintSettings {
   id                  String   @id @default(uuid())
   printOnEveryOrder   Boolean  @default(false) // print immediately when ANY order (dine-in or parcel) is submitted — covers waiters' dine-in orders and single-screen/no-kitchen-display setups
   printWithParcelBill Boolean  @default(false) // additionally print a kitchen-style slip when a parcel bill is generated, independent of printOnEveryOrder
+  paperOnlyKitchenTracking Boolean @default(false) // true if the café has no kitchen screen at all and relies purely on printed KOTs — when true, kitchenStatus is still recorded but never gates billing (Phase 17 Step 5's check is skipped entirely, for both dine-in and parcel), since the app has no reliable way to know real kitchen progress without a screen someone actually taps. See Phase 23.
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────
+// Customer Loyalty (Phase 25)
+// ─────────────────────────────────────────────
+
+enum LoyaltyTransactionType {
+  EARNED   // credited when a bill becomes fully PAID
+  REDEEMED // spent at billing time via a LoyaltyRedemptionRule
+  REVERSED // a previously EARNED or REDEEMED transaction undone because its bill was voided
+  ADJUSTED // manual admin correction (goodwill grant, error fix) — always requires a note
+}
+
+// Singleton, fetch via findFirst().
+model LoyaltySettings {
+  id                         String   @id @default(uuid())
+  isEnabled                  Boolean  @default(false) // master switch for the whole feature
+  pointsEarnedPerUnit        Int      @default(1)  // e.g. 1 point...
+  spendUnitInRupees          Int      @default(10) // ...per every ₹10 spent — avoids fractional "points per rupee" input
+  maxRedemptionPercentOfBill Int?     // nullable = no cap; 0-100 if the admin sets one. Strongly recommended to set — otherwise a bill could be reduced to ₹0 via points, a zero-revenue transaction.
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+}
+
+// The tiered options staff present at billing — "spend N points, get X
+// off." Lives conceptually alongside DiscountRule (same section in
+// Settings) but is a distinct model: DiscountRule is automatic/
+// time-based, this is a menu of choices a customer actively redeems
+// against their own points balance.
+model LoyaltyRedemptionRule {
+  id             String       @id @default(uuid())
+  pointsRequired Int          // e.g. 100
+  discountType   DiscountType // reuse existing enum: PERCENTAGE | FLAT
+  discountValue  Int          // percentage (0-100) or paise, per discountType — same pattern as DiscountRule.value
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  bills Bill[]
+
+  @@index([isActive])
+}
+
+// The full earn/spend ledger — this is the "points table" on the
+// customer profile. Balance is ALWAYS computed by summing
+// pointsDelta for a customer, never cached on Customer — same
+// principle as the Customer Ledger (Phase 10), which sums Bills/
+// Payments rather than storing a running total that could drift.
+model LoyaltyTransaction {
+  id         String                 @id @default(uuid())
+  customerId String
+  customer   Customer               @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  billId     String?                // the bill that caused this — nullable for manual ADJUSTED entries
+  bill       Bill?                  @relation(fields: [billId], references: [id], onDelete: SetNull)
+  type       LoyaltyTransactionType
+  pointsDelta Int                   // positive for EARNED / a goodwill ADJUSTED credit; negative for REDEEMED / REVERSED-of-an-earn / an ADJUSTED debit
+  note       String?                // required for ADJUSTED, optional context otherwise (e.g. "Reversed — bill voided")
+  staffId    String?                // who triggered it — null for automatic EARNED/REVERSED, set for a manual ADJUSTED entry or the staff who processed a REDEEMED action at billing
+  staff      Staff?                 @relation(fields: [staffId], references: [id], onDelete: SetNull)
+  createdAt  DateTime               @default(now())
+
+  @@index([customerId])
+  @@index([billId])
 }

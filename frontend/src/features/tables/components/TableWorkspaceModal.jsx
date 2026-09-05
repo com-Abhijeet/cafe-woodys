@@ -94,8 +94,20 @@ export function TableWorkspaceModal({ table, onClose, onRefreshTable }) {
         /* Render BillPreview component for non-destructive read-only preview & explicit commit action */
         <BillPreview
           table={table}
-          onBackToOrdering={() => setWorkspaceView('ORDERING')}
-          onRefreshTable={onRefreshTable}
+          onBackToOrdering={() => {
+            refreshOrders();
+            setWorkspaceView('ORDERING');
+          }}
+          onRefreshTable={() => {
+            refreshOrders();
+            if (onRefreshTable) onRefreshTable();
+          }}
+          onBillSettled={(savedBill) => {
+            refreshOrders();
+            setCart([]);
+            setWorkspaceView('ORDERING');
+            if (onRefreshTable) onRefreshTable(savedBill);
+          }}
         />
       ) : (
         /* Full-Page Ordering View */

@@ -33,7 +33,8 @@ import {
   ShoppingBag,
   SlidersHorizontal,
   Utensils,
-  Eye
+  Eye,
+  Award
 } from 'lucide-react';
 import styles from './CheckoutModal.module.css';
 
@@ -68,6 +69,12 @@ export function BillingView({ tableId, initialBill = null, onBack, onBillSettled
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
 
+  // Phase 25 Loyalty State
+  const [loyaltySettings, setLoyaltySettings] = useState(null);
+  const [customerLoyalty, setCustomerLoyalty] = useState(null);
+  const [redemptionRules, setRedemptionRules] = useState([]);
+  const [selectedLoyaltyRuleId, setSelectedLoyaltyRuleId] = useState(null);
+
   // Modals
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showQuickConfigModal, setShowQuickConfigModal] = useState(false);
@@ -86,12 +93,18 @@ export function BillingView({ tableId, initialBill = null, onBack, onBillSettled
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [profRes, previewRes] = await Promise.all([
+      const [profRes, payRes, previewRes] = await Promise.all([
         apiClient('/business-profile').catch(() => null),
+        apiClient('/payment-settings').catch(() => null),
         tableId ? apiClient(`/tables/${tableId}/bill-preview`).catch(() => null) : Promise.resolve(null)
       ]);
 
-      if (profRes) setBusinessProfile(profRes);
+      if (profRes || payRes) {
+        setBusinessProfile({
+          ...(profRes || {}),
+          ...(payRes || {})
+        });
+      }
 
       const targetData = previewRes || initialBill;
       if (targetData) {
@@ -107,6 +120,25 @@ export function BillingView({ tableId, initialBill = null, onBack, onBillSettled
   useEffect(() => {
     loadData();
   }, [tableId, initialBill?.id]);
+
+  useEffect(() => {
+    const custId = bill?.customer?.id || bill?.customerId;
+    if (!custId) {
+      setCustomerLoyalty(null);
+      setSelectedLoyaltyRuleId(null);
+      return;
+    }
+
+    Promise.all([
+      apiClient('/loyalty-settings').catch(() => null),
+      apiClient(`/customers/${custId}/loyalty`).catch(() => null),
+      apiClient('/loyalty-redemption-rules').catch(() => null)
+    ]).then(([settRes, loyRes, rulesRes]) => {
+      if (settRes?.data) setLoyaltySettings(settRes.data);
+      if (loyRes?.data) setCustomerLoyalty(loyRes.data);
+      if (rulesRes?.data) setRedemptionRules(rulesRes.data);
+    });
+  }, [bill?.customer?.id, bill?.customerId]);
 
   // Normalize display orders list across all open orders for this table/parcel
   const displayOrders = bill?.orders?.length > 0
@@ -252,6 +284,7 @@ export function BillingView({ tableId, initialBill = null, onBack, onBillSettled
           discountAmount: bill?.discountAmount || 0,
           discountReason: bill?.discountReason || null,
           customerId: bill?.customer?.id || bill?.customerId || null,
+          loyaltyRedemptionRuleId: selectedLoyaltyRuleId,
           payment: paymentPayload,
           ignoreKitchenWarning
         }
@@ -325,16 +358,22 @@ export function BillingView({ tableId, initialBill = null, onBack, onBillSettled
     }
   };
 
-  const handleUpdateCustomer = async (customerId) => {
-    if (!bill?.id) return;
-    try {
-      const res = await apiClient(`/bills/${bill.id}/customer`, {
-        method: 'PATCH',
-        body: { customerId }
-      });
-      setBill(res.data);
-    } catch (err) {
-      setError(err.message);
+  const handleUpdateCustomer = async (cust) => {
+    const custId = typeof cust === 'object' ? cust?.id : cust;
+    const custObj = typeof cust === 'object' ? cust : null;
+
+    setBill((prev) => (prev ? { ...prev, customer: custObj || (custId ? prev.customer : null), customerId: custId } : prev));
+
+    if (bill?.id) {
+      try {
+        const res = await apiClient(`/bills/${bill.id}/customer`, {
+          method: 'PATCH',
+          body: { customerId: custId }
+        });
+        if (res?.data) setBill(res.data);
+      } catch (err) {
+        setError(err.message);
+      }
     }
   };
 
@@ -522,10 +561,60 @@ export function BillingView({ tableId, initialBill = null, onBack, onBillSettled
             </div>
             <CustomerResolveField
               selectedCustomer={bill?.customer}
-              onSelectCustomer={(c) => handleUpdateCustomer(c?.id || null)}
+              onSelectCustomer={(c) => handleUpdateCustomer(c)}
               onClearCustomer={() => handleUpdateCustomer(null)}
             />
           </div>
+
+          {/* Phase 25 Loyalty Points Redemption Widget */}
+          {loyaltySettings?.isEnabled && (bill?.customer || bill?.customerId) && (
+            <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-3)', border: '1px solid #fbbf2440', boxShadow: 'var(--shadow-card)' }}>
+              <div style={{ fontSize: 'var(--text-xs)', fontWeight: 800, color: '#fbbf24', marginBottom: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Award size={14} /> Loyalty Points
+                </span>
+                <span style={{ backgroundColor: '#fbbf2420', color: '#fbbf24', padding: '2px 8px', borderRadius: '12px', fontSize: '11px' }}>
+                  Balance: <strong>{customerLoyalty?.balance ?? 0} pts</strong>
+                </span>
+              </div>
+
+              {redemptionRules.filter((r) => r.isActive && r.pointsRequired <= (customerLoyalty?.balance || 0)).length === 0 ? (
+                <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontStyle: 'italic' }}>
+                  {(customerLoyalty?.balance || 0) > 0 ? 'No qualifying redemption tiers for current balance.' : 'Customer has 0 points available to redeem.'}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Redeem Points Tier:</label>
+                  <select
+                    value={selectedLoyaltyRuleId || ''}
+                    onChange={(e) => setSelectedLoyaltyRuleId(e.target.value || null)}
+                    style={{
+                      width: '100%',
+                      padding: '6px 8px',
+                      borderRadius: 'var(--radius-md)',
+                      backgroundColor: 'var(--color-bg)',
+                      color: 'var(--color-text-primary)',
+                      border: '1px solid var(--color-border)',
+                      fontSize: '12px',
+                      fontWeight: 600
+                    }}
+                  >
+                    <option value="">No Loyalty Discount</option>
+                    {redemptionRules
+                      .filter((r) => r.isActive && r.pointsRequired <= (customerLoyalty?.balance || 0))
+                      .map((r) => {
+                        const discountLabel = r.discountType === 'FLAT' ? `₹${(r.discountValue / 100).toFixed(0)} Off` : `${r.discountValue}% Off`;
+                        return (
+                          <option key={r.id} value={r.id}>
+                            Use {r.pointsRequired} pts → {discountLabel}
+                          </option>
+                        );
+                      })}
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
 
           {rightPanelTab === 'LIVE_ITEMS' ? (
             /* TAB 1: Live Unified Order Items & Direct In-Line Quantity Controls */

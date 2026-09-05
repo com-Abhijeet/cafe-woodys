@@ -254,7 +254,7 @@ export function CustomerResolveField({ selectedCustomer, onSelectCustomer, onCle
 
           {createError && <div style={{ color: 'var(--color-danger)', fontSize: '11px', marginBottom: '6px' }}>{createError}</div>}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '8px' }}>
             <Input
               placeholder="Customer Name"
               value={newName}

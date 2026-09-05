@@ -111,10 +111,15 @@ export function OrderTicketCard({ order, onAdvanceStatus, onCancelOrder }) {
 
   // Step 6: Dine-in vs Parcel shown via left-border color accent
   const leftBorderColor = isParcel ? '#27ae60' : '#6B3F2A';
+  const isNew = elapsedSecsTotal < 120; // Fresh order placed under 2 mins ago
 
   return (
     <div
       style={{
+        width: '310px',
+        minWidth: '280px',
+        maxWidth: '340px',
+        flexShrink: 0,
         backgroundColor: 'var(--color-surface)',
         borderRadius: 'var(--radius-md)',
         border: '1px solid var(--color-border)',
@@ -123,15 +128,33 @@ export function OrderTicketCard({ order, onAdvanceStatus, onCancelOrder }) {
         display: 'flex',
         flexDirection: 'column',
         gap: '8px',
-        height: 'auto', // Step 6: Height fits content, not a fixed size
-        boxShadow: 'var(--shadow-card)'
+        height: 'auto',
+        boxShadow: 'var(--shadow-card)',
+        boxSizing: 'border-box'
       }}
     >
-      {/* Header: Order Number (Primary, Largest Element) */}
+      {/* Header: Order Number & NEW Tag */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <div style={{ fontSize: 'var(--text-lg)', fontWeight: 800, color: 'var(--color-brand)', lineHeight: 1.1 }}>
-            Order #{order.dailyOrderNumber || order.id.slice(-4).toUpperCase()}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: 'var(--text-lg)', fontWeight: 800, color: 'var(--color-brand)', lineHeight: 1.1 }}>
+              Order #{order.dailyOrderNumber || order.id.slice(-4).toUpperCase()}
+            </span>
+            {isNew && (
+              <span style={{
+                fontSize: '9px',
+                fontWeight: 900,
+                padding: '2px 7px',
+                borderRadius: '10px',
+                backgroundColor: '#10b981',
+                color: '#ffffff',
+                letterSpacing: '0.5px',
+                boxShadow: '0 0 8px rgba(16, 185, 129, 0.5)',
+                textTransform: 'uppercase'
+              }}>
+                🔥 NEW
+              </span>
+            )}
           </div>
           <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', fontWeight: 600, marginTop: '2px' }}>
             {locationLabel} • {order.staff?.username || 'Staff'}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useCustomers } from '../hooks/useCustomers';
+import { CustomerLoyaltyTab } from './CustomerLoyaltyTab';
 import { Input } from '../../../components/ui/Input/Input';
 import { Button } from '../../../components/ui/Button/Button';
 import { ListRow } from '../../../components/ui/ListRow';
@@ -13,6 +14,7 @@ export function CustomerCRMManager() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [activeProfile, setActiveProfile] = useState(null);
+  const [profileTab, setProfileTab] = useState('BILLS'); // 'BILLS' | 'LOYALTY' | 'SMS'
 
   const [actionError, setActionError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -47,6 +49,7 @@ export function CustomerCRMManager() {
     try {
       const fullProfile = await getCustomerProfile(cust.id);
       setActiveProfile(fullProfile);
+      setProfileTab('BILLS');
       setShowProfileModal(true);
     } catch (err) {
       alert(`Failed to load profile: ${err.message}`);
@@ -58,7 +61,7 @@ export function CustomerCRMManager() {
       <div className={styles.header}>
         <div>
           <h2 className={styles.title}>Customer CRM Directory</h2>
-          <p className={styles.subtitle}>Track returning customer visits, total spend history, and SMS dispatches</p>
+          <p className={styles.subtitle}>Track returning customer visits, total spend history, loyalty points, and SMS dispatches</p>
         </div>
         <Button onClick={() => { setActionError(''); setShowAddModal(true); }}>
           <Plus size={16} /> Add Customer
@@ -148,8 +151,8 @@ export function CustomerCRMManager() {
       {/* Modal 2: Customer Full Profile & History */}
       {showProfileModal && activeProfile && (
         <div className={styles.modalOverlay}>
-          <div className={styles.modalCard}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div className={styles.modalCard} style={{ maxWidth: '650px', width: '90%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
               <div>
                 <h3 style={{ margin: 0, color: 'var(--color-brand)' }}>{activeProfile.name}</h3>
                 <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
@@ -164,54 +167,120 @@ export function CustomerCRMManager() {
               </div>
             </div>
 
-            {/* Visit History Bills */}
-            <div>
-              <h4 style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-brand)', marginBottom: '8px' }}>
-                Past Bill History ({activeProfile.bills?.length || 0} Bills)
-              </h4>
-              {activeProfile.bills?.length === 0 ? (
-                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>No past bills recorded.</p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto' }}>
-                  {activeProfile.bills.map((bill) => (
-                    <div key={bill.id} style={{ backgroundColor: 'var(--color-bg)', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)' }}>
-                      <span>Bill #{bill.id.slice(-6).toUpperCase()} ({new Date(bill.createdAt).toLocaleDateString()})</span>
-                      <span style={{ fontWeight: 700 }}>₹{(bill.grandTotal / 100).toFixed(2)} • {bill.paymentStatus}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+            {/* Profile Navigation Tabs */}
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', marginBottom: '16px' }}>
+              <button
+                type="button"
+                onClick={() => setProfileTab('BILLS')}
+                style={{
+                  padding: '8px 16px',
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: profileTab === 'BILLS' ? '2px solid var(--color-brand)' : '2px solid transparent',
+                  color: profileTab === 'BILLS' ? 'var(--color-brand)' : 'var(--color-text-secondary)',
+                  fontWeight: profileTab === 'BILLS' ? 700 : 500,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Receipt size={15} /> Bills History ({activeProfile.bills?.length || 0})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setProfileTab('LOYALTY')}
+                style={{
+                  padding: '8px 16px',
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: profileTab === 'LOYALTY' ? '2px solid #fbbf24' : '2px solid transparent',
+                  color: profileTab === 'LOYALTY' ? '#fbbf24' : 'var(--color-text-secondary)',
+                  fontWeight: profileTab === 'LOYALTY' ? 700 : 500,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Award size={15} /> Loyalty Points
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setProfileTab('SMS')}
+                style={{
+                  padding: '8px 16px',
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: profileTab === 'SMS' ? '2px solid var(--color-brand)' : '2px solid transparent',
+                  color: profileTab === 'SMS' ? 'var(--color-brand)' : 'var(--color-text-secondary)',
+                  fontWeight: profileTab === 'SMS' ? 700 : 500,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <MessageSquare size={15} /> SMS Logs ({activeProfile.smsLogs?.length || 0})
+              </button>
             </div>
 
-            {/* SMS Dispatches Log */}
-            <div>
-              <h4 style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-brand)', marginBottom: '8px' }}>
-                SMS Notification Dispatches ({activeProfile.smsLogs?.length || 0})
-              </h4>
-              {activeProfile.smsLogs?.length === 0 ? (
-                <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>No SMS dispatches sent yet.</p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '150px', overflowY: 'auto' }}>
-                  {activeProfile.smsLogs.map((log) => (
-                    <div key={log.id} style={{ backgroundColor: 'var(--color-bg)', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--color-border)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)', fontWeight: 700 }}>
-                        <span style={{ color: log.status === 'SENT' ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                          Status: {log.status}
-                        </span>
-                        <span style={{ color: 'var(--color-text-secondary)' }}>
-                          {new Date(log.sentAt).toLocaleString()}
-                        </span>
+            {/* Tab 1: Visit History Bills */}
+            {profileTab === 'BILLS' && (
+              <div>
+                {activeProfile.bills?.length === 0 ? (
+                  <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', padding: '16px 0' }}>No past bills recorded.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '300px', overflowY: 'auto' }}>
+                    {activeProfile.bills.map((bill) => (
+                      <div key={bill.id} style={{ backgroundColor: 'var(--color-bg)', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)' }}>
+                        <span>Bill #{bill.id.slice(-6).toUpperCase()} ({new Date(bill.createdAt).toLocaleDateString()})</span>
+                        <span style={{ fontWeight: 700 }}>₹{(bill.grandTotal / 100).toFixed(2)} • {bill.paymentStatus}</span>
                       </div>
-                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
-                        "{log.message}"
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-2)' }}>
+            {/* Tab 2: Loyalty Points Ledger */}
+            {profileTab === 'LOYALTY' && (
+              <CustomerLoyaltyTab customerId={activeProfile.id} />
+            )}
+
+            {/* Tab 3: SMS Dispatches Log */}
+            {profileTab === 'SMS' && (
+              <div>
+                {activeProfile.smsLogs?.length === 0 ? (
+                  <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', padding: '16px 0' }}>No SMS dispatches sent yet.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '300px', overflowY: 'auto' }}>
+                    {activeProfile.smsLogs.map((log) => (
+                      <div key={log.id} style={{ backgroundColor: 'var(--color-bg)', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--color-border)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)', fontWeight: 700 }}>
+                          <span style={{ color: log.status === 'SENT' ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                            Status: {log.status}
+                          </span>
+                          <span style={{ color: 'var(--color-text-secondary)' }}>
+                            {new Date(log.sentAt).toLocaleString()}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
+                          "{log.message}"
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-4)' }}>
               <Button variant="secondary" onClick={() => setShowProfileModal(false)}>Close</Button>
             </div>
           </div>

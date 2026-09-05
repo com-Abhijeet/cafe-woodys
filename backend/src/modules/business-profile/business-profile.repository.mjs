@@ -15,15 +15,7 @@ export const businessProfileRepository = {
         gstin: "",
         fssaiNumber: "",
         logoUrl: null,
-        receiptFooterNote: "Thank you for visiting Café Woody's! Visit again.",
-        defaultGstPercent: 5,
-        gamingGracePeriodMinutes: 5,
-        orderCancellationWindowSeconds: 300,
-        pricesIncludeTax: false,
-        upiId: null,
-        upiPayeeName: null,
-        autoMarkBillsPaidInFull: false,
-        alwaysSaveAndPrint: false
+        receiptFooterNote: "Thank you for visiting Café Woody's! Visit again."
       }
     });
   },
@@ -39,15 +31,7 @@ export const businessProfileRepository = {
         ...(data.gstin !== undefined && { gstin: data.gstin }),
         ...(data.fssaiNumber !== undefined && { fssaiNumber: data.fssaiNumber }),
         ...(data.logoUrl !== undefined && { logoUrl: data.logoUrl }),
-        ...(data.receiptFooterNote !== undefined && { receiptFooterNote: data.receiptFooterNote }),
-        ...(data.defaultGstPercent !== undefined && { defaultGstPercent: data.defaultGstPercent }),
-        ...(data.gamingGracePeriodMinutes !== undefined && { gamingGracePeriodMinutes: data.gamingGracePeriodMinutes }),
-        ...(data.orderCancellationWindowSeconds !== undefined && { orderCancellationWindowSeconds: data.orderCancellationWindowSeconds }),
-        ...(data.pricesIncludeTax !== undefined && { pricesIncludeTax: data.pricesIncludeTax }),
-        ...(data.upiId !== undefined && { upiId: data.upiId }),
-        ...(data.upiPayeeName !== undefined && { upiPayeeName: data.upiPayeeName }),
-        ...(data.autoMarkBillsPaidInFull !== undefined && { autoMarkBillsPaidInFull: data.autoMarkBillsPaidInFull }),
-        ...(data.alwaysSaveAndPrint !== undefined && { alwaysSaveAndPrint: data.alwaysSaveAndPrint })
+        ...(data.receiptFooterNote !== undefined && { receiptFooterNote: data.receiptFooterNote })
       }
     });
   }

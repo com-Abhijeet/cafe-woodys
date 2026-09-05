@@ -1,3 +1,4 @@
+import prisma from '../../shared/db/client.mjs';
 import { tableRepository } from './table.repository.mjs';
 import { zoneRepository } from '../zone/zone.repository.mjs';
 import { broadcastTableUpdate } from '../../realtime/broadcast.mjs';
@@ -17,6 +18,15 @@ function enrichTable(table) {
     activePlayersCount: table.gamingSessions?.length || 0,
     hasOpenOrders: (table.orders?.length || 0) > 0
   };
+}
+
+export async function canTableBeFreed(tableId, tx = prisma) {
+  if (!tableId) return false;
+  const [openOrders, activeSessions] = await Promise.all([
+    tx.order.count({ where: { tableId, status: 'OPEN' } }),
+    tx.gamingSession.count({ where: { tableId, status: 'ACTIVE' } })
+  ]);
+  return openOrders === 0 && activeSessions === 0;
 }
 
 export const tableService = {

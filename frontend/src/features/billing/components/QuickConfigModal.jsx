@@ -6,35 +6,39 @@ import { X, Settings, Printer, CheckCircle, Zap } from 'lucide-react';
 export function QuickConfigModal({
   isOpen,
   onClose,
-  businessProfile,
   onProfileUpdated
 }) {
   const [alwaysSaveAndPrint, setAlwaysSaveAndPrint] = useState(false);
   const [autoMarkBillsPaidInFull, setAutoMarkBillsPaidInFull] = useState(false);
   const [printWithParcelBill, setPrintWithParcelBill] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    if (businessProfile) {
-      setAlwaysSaveAndPrint(Boolean(businessProfile.alwaysSaveAndPrint));
-      setAutoMarkBillsPaidInFull(Boolean(businessProfile.autoMarkBillsPaidInFull));
-    }
-    // Fetch Kitchen Print Settings
+    if (!isOpen) return;
+
+    apiClient('/payment-settings')
+      .then((res) => {
+        if (res) {
+          setAlwaysSaveAndPrint(Boolean(res.alwaysSaveAndPrint));
+          setAutoMarkBillsPaidInFull(Boolean(res.autoMarkBillsPaidInFull));
+        }
+      })
+      .catch(() => {});
+
     apiClient('/kitchen-print-settings')
       .then((res) => {
         if (res) setPrintWithParcelBill(Boolean(res.printWithParcelBill));
       })
       .catch(() => {});
-  }, [businessProfile, isOpen]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   const handleToggleSaveAndPrint = async (val) => {
     setAlwaysSaveAndPrint(val);
     try {
-      const res = await apiClient('/business-profile', {
-        method: 'PATCH',
+      const res = await apiClient('/payment-settings', {
+        method: 'PUT',
         body: { alwaysSaveAndPrint: val }
       });
       if (onProfileUpdated) onProfileUpdated(res);
@@ -48,8 +52,8 @@ export function QuickConfigModal({
   const handleToggleAutoMarkPaid = async (val) => {
     setAutoMarkBillsPaidInFull(val);
     try {
-      const res = await apiClient('/business-profile', {
-        method: 'PATCH',
+      const res = await apiClient('/payment-settings', {
+        method: 'PUT',
         body: { autoMarkBillsPaidInFull: val }
       });
       if (onProfileUpdated) onProfileUpdated(res);
