@@ -1,19 +1,34 @@
-import { formatReceiptText } from './receiptFormatter';
+import { formatReceiptText, sanitizeThermalText } from './receiptFormatter';
 import { fetchBusinessProfileApi } from '../features/settings/api/businessProfile.api';
 import { detectConnector } from './print/PrintService';
 
-export async function printBillViaRawBT(bill, options = {}) {
-  let profile = options.businessProfile;
-
-  if (!profile) {
-    try {
-      profile = await fetchBusinessProfileApi();
-    } catch (err) {
-      console.warn('Could not fetch business profile for receipt print:', err);
-    }
+export function triggerRawBTIntent(text) {
+  const sanitized = sanitizeThermalText(text);
+  try {
+    const base64Data = btoa(unescape(encodeURIComponent(sanitized)));
+    const rawbtUrl = `rawbt:data:text/plain;base64,${base64Data}`;
+    window.location.href = rawbtUrl;
+    return { success: true, method: 'RAWBT' };
+  } catch (err) {
+    console.error('Failed to trigger RawBT URL:', err);
+    return fallbackPrintPreview(sanitized);
   }
+}
 
-  const formattedText = formatReceiptText(bill, { ...options, businessProfile: profile });
+export async function printBillViaRawBT(billOrText, options = {}) {
+  let formattedText = typeof billOrText === 'string' ? billOrText : '';
+
+  if (!formattedText && billOrText) {
+    let profile = options.businessProfile;
+    if (!profile) {
+      try {
+        profile = await fetchBusinessProfileApi();
+      } catch (err) {
+        console.warn('Could not fetch business profile for receipt print:', err);
+      }
+    }
+    formattedText = formatReceiptText(billOrText, { ...options, businessProfile: profile });
+  }
 
   // 1. Check if PC Print Connector companion app is running locally on port 9200
   const hasConnector = await detectConnector();
@@ -22,26 +37,19 @@ export async function printBillViaRawBT(bill, options = {}) {
       const response = await fetch('http://localhost:9200/print', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: formattedText, bill })
+        body: JSON.stringify({ text: formattedText, bill: typeof billOrText === 'object' ? billOrText : null })
       });
       const data = await response.json();
       if (response.ok && data.success) {
-        return;
+        return { success: true, method: 'PC_CONNECTOR' };
       }
     } catch (err) {
       console.warn('PC Connector call failed, falling back:', err.message);
     }
   }
 
-  // 2. Construct RawBT URL scheme for mobile / Android tablets
-  const rawbtUrl = `rawbt:data:text/plain;charset=utf-8,${encodeURIComponent(formattedText)}`;
-
-  try {
-    window.location.href = rawbtUrl;
-  } catch (err) {
-    console.error('Failed to trigger RawBT URL:', err);
-    fallbackPrintPreview(formattedText);
-  }
+  // 2. Construct RawBT Base64 Intent
+  return triggerRawBTIntent(formattedText);
 }
 
 export function fallbackPrintPreview(text) {

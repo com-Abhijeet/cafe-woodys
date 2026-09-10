@@ -37,7 +37,7 @@ export function SubmittedOrdersList({ orders, unbilledFoodTotal, onRefreshOrders
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: 'var(--color-surface)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, overflow: 'hidden', backgroundColor: 'var(--color-surface)' }}>
       {/* 1. Header */}
       <button className={styles.pastOrdersHeader} onClick={() => setIsExpanded(!isExpanded)}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

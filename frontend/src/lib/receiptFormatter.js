@@ -1,5 +1,16 @@
 import { formatInvoiceNumber } from './invoiceFormat';
 
+export function sanitizeThermalText(text) {
+  if (!text) return '';
+  return text
+    .replace(/₹\s*/g, 'Rs.')
+    .replace(/—/g, '-')
+    .replace(/–/g, '-')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\u00A0/g, ' ');
+}
+
 export function getCharsPerLine(profile = {}) {
   if (profile.thermalCharsPerLineOverride && Number(profile.thermalCharsPerLineOverride) > 0) {
     return Number(profile.thermalCharsPerLineOverride);
@@ -164,7 +175,7 @@ export function formatReceiptText(bill = {}, options = {}) {
   lines.push(centerText('Please Come Again', width));
   lines.push(doubleDivider);
 
-  return lines.join('\n');
+  return sanitizeThermalText(lines.join('\n'));
 }
 
 // Phase 20 Step 5: Shared Kitchen Slip Formatter (No prices, no GST, no payment info, no icons)
@@ -204,5 +215,5 @@ export function formatKitchenSlipText(orderOrBill = {}, options = {}) {
   lines.push(centerText(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), width));
   lines.push(doubleDivider);
 
-  return lines.join('\n');
+  return sanitizeThermalText(lines.join('\n'));
 }

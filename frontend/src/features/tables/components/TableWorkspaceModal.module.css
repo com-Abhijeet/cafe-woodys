@@ -339,15 +339,15 @@
   gap: 8px;
 }
 
-/* Right Column: Order Cart */
+/* Right Column: Order Cart & History Panel */
 .cartPanel {
-  width: 320px;
+  width: 340px;
   background-color: var(--color-surface);
-  padding: var(--space-4);
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
   flex-shrink: 0;
+  overflow: hidden;
+  height: 100%;
 }
 
 .cartHeader {

@@ -489,7 +489,7 @@ export function BillingView({ tableId, initialBill = null, onBack, onBillSettled
         </div>
 
         {/* RIGHT SIDE (25-30% Width / 440px): UNIFIED BILL & REALTIME EDITING WORKSPACE */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', overflowY: 'auto', height: '100%', minHeight: 0, paddingRight: '4px' }}>
 
           {/* Right Panel View Toggle Tabs */}
           <div style={{ display: 'flex', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-md)', padding: '3px', border: '1px solid var(--color-border)' }}>
@@ -630,7 +630,7 @@ export function BillingView({ tableId, initialBill = null, onBack, onBillSettled
                     No dishes on this bill yet. Tap any item on the left menu to add!
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '280px', overflowY: 'auto', paddingRight: '4px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', overflowY: 'auto', flex: 1, minHeight: '120px', paddingRight: '4px' }}>
                     {activeLineItems.map((item) => (
                       <div
                         key={item.id}

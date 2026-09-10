@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useBilling } from '../hooks/useBilling';
 import { useCustomers } from '../../customers/hooks/useCustomers';
-import { printBillViaRawBT } from '../../../lib/rawbtPrinter';
+import { printReceipt } from '../../../lib/print/PrintService';
 import { Input } from '../../../components/ui/Input/Input';
 import { Button } from '../../../components/ui/Button/Button';
 import { X, CheckCircle2, Receipt, Printer, User, UserCheck, Plus, Search } from 'lucide-react';
@@ -24,21 +24,22 @@ export function CheckoutModal({ bill: initialBill, table, onClose, onRefreshTabl
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newCustName, setNewCustName] = useState('');
 
+  // Synchronize initial bill state & calculate remaining balance
   useEffect(() => {
     if (initialBill?.id) {
       loadBill(initialBill.id);
     }
-  }, [initialBill?.id, loadBill]);
+  }, [initialBill?.id]);
 
   useEffect(() => {
     if (activeBill) {
-      const remainingRs = (activeBill.remainingBalance / 100).toFixed(2);
-      setPayAmountRs(remainingRs);
+      const remPaise = activeBill.remainingBalance || 0;
+      setPayAmountRs((remPaise / 100).toFixed(2));
       if (activeBill.customer) {
         setSelectedCustomer(activeBill.customer);
       }
     }
-  }, [activeBill]);
+  }, [activeBill?.remainingBalance, activeBill?.customer?.id]);
 
   if (!activeBill) {
     return null;
@@ -100,8 +101,8 @@ export function CheckoutModal({ bill: initialBill, table, onClose, onRefreshTabl
     }
   };
 
-  const handlePrint = () => {
-    printBillViaRawBT(activeBill);
+  const handlePrint = async () => {
+    await printReceipt(activeBill);
   };
 
   return (

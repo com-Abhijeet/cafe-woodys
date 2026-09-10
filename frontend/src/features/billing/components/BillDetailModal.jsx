@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useBilling } from '../hooks/useBilling';
 import { useAuth } from '../../../hooks/useAuth';
 import { useBusinessProfile } from '../../settings/hooks/useBusinessProfile';
-import { printBillViaRawBT } from '../../../lib/rawbtPrinter';
+import { printReceipt } from '../../../lib/print/PrintService';
 import { formatInvoiceNumber } from '../../../lib/invoiceFormat';
 import { recordRefundApi, fetchBillApi } from '../api/billing.api';
 import { UpiQrCode } from './UpiQrCode';
@@ -142,8 +142,8 @@ export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
     }
   };
 
-  const handlePrintReceipt = () => {
-    printBillViaRawBT(activeBill, { businessProfile: profile });
+  const handlePrintReceipt = async () => {
+    await printReceipt(activeBill, { businessProfile: profile });
   };
 
   return (

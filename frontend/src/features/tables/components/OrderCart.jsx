@@ -6,7 +6,7 @@ export function OrderCart({ cart, onUpdateCartQty, onSubmitOrder, isSubmitting }
   const subtotalPaise = cart.reduce((sum, c) => sum + (c.menuItem.price * c.quantity), 0);
 
   return (
-    <div className={styles.cartPanel}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, padding: 'var(--space-3)', boxSizing: 'border-box', flex: 1, backgroundColor: 'var(--color-surface)' }}>
       <div className={styles.cartHeader}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <ShoppingCart size={18} color="var(--color-brand)" />

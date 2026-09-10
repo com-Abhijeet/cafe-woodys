@@ -4,6 +4,7 @@
 import { Capacitor } from '@capacitor/core';
 import { formatReceiptText, formatKitchenSlipText } from '../receiptFormatter';
 import { printNative } from './nativePrinter';
+import { printBillViaRawBT } from '../rawbtPrinter';
 import { webFallback } from './webFallback';
 import { apiClient } from '../apiClient';
 
@@ -42,15 +43,21 @@ export async function printReceipt(bill, customPrinterConfig = null) {
 
   const printerConfig = customPrinterConfig || (await resolvePrinterConfig('BILLING'));
   const formattedText = formatReceiptText(bill);
+  const connectionType = (printerConfig.connectionType || '').toUpperCase();
 
-  // 1. Native Capacitor Thermal Printing (Android Counter App - TCP or USB)
+  // If RAWBT is explicitly set in settings
+  if (connectionType === 'RAWBT') {
+    return printBillViaRawBT(formattedText, { businessProfile: printerConfig.businessProfile });
+  }
+
+  // 1. Native Capacitor Thermal Printing (Android App - USB, TCP, Bluetooth, RawBT)
   if (Capacitor.isNativePlatform()) {
     try {
       const result = await printNative(formattedText, printerConfig);
       return result;
     } catch (err) {
       console.error('PrintService native exception isolated:', err);
-      return { success: false, error: err.message || 'Native printing failed' };
+      return printBillViaRawBT(formattedText, { businessProfile: printerConfig.businessProfile });
     }
   }
 
@@ -86,12 +93,18 @@ export async function printKitchenSlip(orderOrBill, customPrinterConfig = null) 
   // Phase 21 Step 3: Resolves KITCHEN printer first, falling back to BILLING printer
   const printerConfig = customPrinterConfig || (await resolvePrinterConfig('KITCHEN'));
   const formattedText = formatKitchenSlipText(orderOrBill);
+  const connectionType = (printerConfig.connectionType || '').toUpperCase();
+
+  if (connectionType === 'RAWBT') {
+    return printBillViaRawBT(formattedText, { businessProfile: printerConfig.businessProfile });
+  }
 
   if (Capacitor.isNativePlatform()) {
     try {
       return await printNative(formattedText, printerConfig);
     } catch (err) {
-      return { success: false, error: err.message || 'Native kitchen printing failed' };
+      console.warn('Native kitchen printing failed, falling back to RawBT:', err.message);
+      return printBillViaRawBT(formattedText, { businessProfile: printerConfig.businessProfile });
     }
   }
 

@@ -343,8 +343,9 @@ export function PrintersSettingsForm() {
                   style={{ width: '100%', padding: '8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: 'var(--text-xs)', fontWeight: 600 }}
                 >
                   <option value="TCP">WiFi / LAN TCP IP (Port 9100)</option>
-                  <option value="USB">Native Android USB (Direct OTG)</option>
-                  <option value="BLUETOOTH">Bluetooth</option>
+                  <option value="USB">Wired USB (Direct OTG Cable)</option>
+                  <option value="BLUETOOTH">Bluetooth Thermal Printer</option>
+                  <option value="RAWBT">RawBT Companion App (Android)</option>
                   <option value="SYSTEM_DEFAULT">PC Print Connector (OS Default)</option>
                 </select>
               </div>
