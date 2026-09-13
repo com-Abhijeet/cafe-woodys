@@ -11,12 +11,24 @@ export function sanitizeThermalText(text) {
     .replace(/\u00A0/g, ' ');
 }
 
-export function getCharsPerLine(profile = {}) {
-  if (profile.thermalCharsPerLineOverride && Number(profile.thermalCharsPerLineOverride) > 0) {
-    return Number(profile.thermalCharsPerLineOverride);
+export function getCharsPerLine(configOrProfile = {}, options = {}) {
+  const printerConfig = options.printerConfig || configOrProfile;
+  if (printerConfig.charsPerLineOverride && Number(printerConfig.charsPerLineOverride) > 0) {
+    return Number(printerConfig.charsPerLineOverride);
   }
-  const widthMm = Number(profile.thermalPaperWidthMm) || (profile.thermalPaperWidth === 'MM_58' ? 58 : 72);
-  return widthMm <= 58 ? 28 : 36;
+  if (printerConfig.thermalCharsPerLineOverride && Number(printerConfig.thermalCharsPerLineOverride) > 0) {
+    return Number(printerConfig.thermalCharsPerLineOverride);
+  }
+  if (printerConfig.charsPerLine && Number(printerConfig.charsPerLine) > 0) {
+    return Number(printerConfig.charsPerLine);
+  }
+
+  const widthMm = Number(printerConfig.paperWidthMm || printerConfig.thermalPaperWidthMm) || 
+                  (printerConfig.thermalPaperWidth === 'MM_58' ? 58 : 80);
+
+  // 58mm paper roll -> 32 chars/line
+  // 80mm paper roll -> 48 chars/line (Font A standard as per printer self-test)
+  return widthMm <= 58 ? 32 : 48;
 }
 
 function padRight(str, len) {
@@ -36,7 +48,8 @@ function centerText(str, width) {
 
 export function formatReceiptText(bill = {}, options = {}) {
   const profile = options.businessProfile || bill.businessProfile || {};
-  const width = options.width || getCharsPerLine(profile);
+  const printerConfig = options.printerConfig || {};
+  const width = options.width || getCharsPerLine(printerConfig, { businessProfile: profile });
 
   const divider = '-'.repeat(width);
   const doubleDivider = '='.repeat(width);
@@ -208,7 +221,9 @@ export function formatReceiptText(bill = {}, options = {}) {
 
 // Phase 20 Step 5: Shared Kitchen Slip Formatter (No prices, no GST, no payment info, no icons)
 export function formatKitchenSlipText(orderOrBill = {}, options = {}) {
-  const width = options.width || 32;
+  const profile = options.businessProfile || orderOrBill.businessProfile || {};
+  const printerConfig = options.printerConfig || {};
+  const width = options.width || getCharsPerLine(printerConfig, { businessProfile: profile });
   const divider = '-'.repeat(width);
   const doubleDivider = '='.repeat(width);
 
@@ -216,7 +231,7 @@ export function formatKitchenSlipText(orderOrBill = {}, options = {}) {
 
   const dailyNum = orderOrBill.dailyOrderNumber || orderOrBill.invoiceNumber || 'N/A';
   lines.push(doubleDivider);
-  lines.push(centerText(`*** KITCHEN PREP SLIP ***`, width));
+  lines.push(centerText('*** KITCHEN PREP SLIP ***', width));
   lines.push(centerText(`Order #${dailyNum}`, width));
   lines.push(divider);
 

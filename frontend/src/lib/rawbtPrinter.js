@@ -3,7 +3,7 @@ import { fetchBusinessProfileApi } from '../features/settings/api/businessProfil
 import { detectConnector } from './print/PrintService';
 
 export function triggerRawBTIntent(text) {
-  const sanitized = sanitizeThermalText(text);
+  const sanitized = sanitizeThermalText(text).replace(/\[b\]/g, '').replace(/\[\/b\]/g, '');
   try {
     const base64Data = btoa(unescape(encodeURIComponent(sanitized)));
     const rawbtUrl = `rawbt:data:text/plain;base64,${base64Data}`;

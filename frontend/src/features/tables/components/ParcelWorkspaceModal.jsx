@@ -8,7 +8,7 @@ import { MenuItemGrid } from './MenuItemGrid';
 import { OrderTabs } from './OrderTabs';
 import { BillPreview } from './BillPreview';
 import { Button } from '../../../components/ui/Button/Button';
-import { X, ShoppingBag, Eye } from 'lucide-react';
+import { X, ShoppingBag, Eye, Send } from 'lucide-react';
 import styles from './TableWorkspaceModal.module.css';
 
 export function ParcelWorkspaceModal({ existingOrder = null, onClose, onRefreshTable }) {
@@ -194,6 +194,27 @@ export function ParcelWorkspaceModal({ existingOrder = null, onClose, onRefreshT
               />
             </div>
           </div>
+
+          {/* Sticky Floating Bottom Bar for Mobile Viewports */}
+          {cart.length > 0 && (
+            <div className={styles.mobileFloatingCartBar}>
+              <div className={styles.mobileCartSummary}>
+                <span className={styles.mobileCartCount}>
+                  {cart.reduce((s, c) => s + c.quantity, 0)} item(s) in parcel
+                </span>
+                <span className={styles.mobileCartTotal}>
+                  ₹{(cart.reduce((sum, c) => sum + (c.menuItem.price * c.quantity), 0) / 100).toFixed(2)}
+                </span>
+              </div>
+              <Button
+                onClick={handleSubmitParcelOrder}
+                disabled={isSubmitting}
+                style={{ height: '44px', padding: '0 16px', fontSize: 'var(--text-xs)', fontWeight: 800 }}
+              >
+                <Send size={16} /> {isSubmitting ? 'Submitting...' : 'Submit Batch Order'}
+              </Button>
+            </div>
+          )}
         </>
       )}
     </div>

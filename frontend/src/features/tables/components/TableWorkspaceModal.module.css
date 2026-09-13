@@ -414,11 +414,16 @@
 }
 
 .cartFooter {
-  border-top: 1px dashed var(--color-border);
+  border-top: 1px solid var(--color-border);
   padding-top: var(--space-3);
+  margin-top: auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  background-color: var(--color-surface);
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
 }
 
 .pastOrdersBox {
@@ -446,11 +451,17 @@
   color: var(--color-text-secondary);
 }
 
+/* Sticky Floating Bottom Bar for Mobile Viewports */
+.mobileFloatingCartBar {
+  display: none;
+}
+
 /* Portrait & Tablet Stacking Styles */
 @media (max-width: 900px), (orientation: portrait) {
   .workspaceBody {
     flex-direction: column !important;
     overflow-y: auto !important;
+    padding-bottom: 72px !important;
   }
 
   .categorySidebar {
@@ -486,5 +497,39 @@
     border-top: 2px solid var(--color-border) !important;
     min-height: 320px !important;
     height: 380px !important;
+  }
+
+  .mobileFloatingCartBar {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    background-color: var(--color-surface);
+    border-top: 2px solid var(--color-brand);
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.2);
+    padding: 8px 16px;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 400;
+    box-sizing: border-box;
+  }
+
+  .mobileCartSummary {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .mobileCartCount {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-text-secondary);
+  }
+
+  .mobileCartTotal {
+    font-size: var(--text-base);
+    font-weight: 800;
+    color: var(--color-brand);
   }
 }

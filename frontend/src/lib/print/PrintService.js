@@ -24,11 +24,17 @@ export async function detectConnector() {
 export async function resolvePrinterConfig(purpose = 'BILLING') {
   try {
     const res = await apiClient('/printer-configs');
-    const printers = res.data || [];
-    let target = printers.find((p) => p.purpose === purpose && p.isEnabled);
+    const printers = Array.isArray(res) ? res : (res?.data || []);
+    // Prioritize enabled default printer for requested purpose
+    let target =
+      printers.find((p) => p.purpose === purpose && p.isEnabled && p.isDefault) ||
+      printers.find((p) => p.purpose === purpose && p.isEnabled);
+
     if (!target && purpose === 'KITCHEN') {
-      // Step 3 Fallback routing: if dedicated kitchen printer isn't available, fall back to billing printer
-      target = printers.find((p) => p.purpose === 'BILLING' && p.isEnabled);
+      // Fallback routing: if dedicated kitchen printer isn't available, fall back to default billing printer
+      target =
+        printers.find((p) => p.purpose === 'BILLING' && p.isEnabled && p.isDefault) ||
+        printers.find((p) => p.purpose === 'BILLING' && p.isEnabled);
     }
     return target || {};
   } catch (err) {
@@ -42,8 +48,9 @@ export async function printReceipt(bill, customPrinterConfig = null) {
     return { success: false, error: 'No bill provided for printing' };
   }
 
-  const printerConfig = customPrinterConfig || (await resolvePrinterConfig('BILLING'));
-  const formattedText = formatReceiptText(bill);
+  const hasValidConfig = customPrinterConfig && typeof customPrinterConfig === 'object' && Boolean(customPrinterConfig.connectionType);
+  const printerConfig = hasValidConfig ? customPrinterConfig : (await resolvePrinterConfig('BILLING'));
+  const formattedText = formatReceiptText(bill, { printerConfig });
   const connectionType = (printerConfig.connectionType || '').toUpperCase();
   const targetPrinterName = printerConfig.name || `Billing Printer (${connectionType || 'DEFAULT'})`;
 
@@ -103,8 +110,9 @@ export async function printKitchenSlip(orderOrBill, customPrinterConfig = null, 
     return { success: false, error: 'No order provided for kitchen slip printing' };
   }
 
-  const printerConfig = customPrinterConfig || (await resolvePrinterConfig('KITCHEN'));
-  const formattedText = formatKitchenSlipText(orderOrBill, options);
+  const hasValidConfig = customPrinterConfig && typeof customPrinterConfig === 'object' && Boolean(customPrinterConfig.connectionType);
+  const printerConfig = hasValidConfig ? customPrinterConfig : (await resolvePrinterConfig('KITCHEN'));
+  const formattedText = formatKitchenSlipText(orderOrBill, { ...options, printerConfig });
   const connectionType = (printerConfig.connectionType || '').toUpperCase();
   const targetPrinterName = printerConfig.name || `Kitchen Printer (${connectionType || 'DEFAULT'})`;
 
