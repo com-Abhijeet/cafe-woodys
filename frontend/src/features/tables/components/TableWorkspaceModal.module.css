@@ -9,6 +9,8 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  padding-top: var(--safe-area-top);
+  padding-bottom: var(--safe-area-bottom);
 }
 
 .workspaceHeader {
@@ -444,8 +446,8 @@
   color: var(--color-text-secondary);
 }
 
-/* Mobile & Small Screen Vertical Stacking Styles */
-@media (max-width: 768px) {
+/* Portrait & Tablet Stacking Styles */
+@media (max-width: 900px), (orientation: portrait) {
   .workspaceBody {
     flex-direction: column !important;
     overflow-y: auto !important;
@@ -459,6 +461,7 @@
     padding: var(--space-2) !important;
     overflow-x: auto !important;
     white-space: nowrap !important;
+    max-height: 52px !important;
   }
 
   .categoryBtn {
@@ -469,6 +472,8 @@
   .centerArea {
     border-right: none !important;
     overflow-y: auto !important;
+    min-height: 280px !important;
+    flex: 1 !important;
   }
 
   .menuGrid {
@@ -478,6 +483,8 @@
 
   .cartPanel {
     width: 100% !important;
-    border-top: 1px solid var(--color-border) !important;
+    border-top: 2px solid var(--color-border) !important;
+    min-height: 320px !important;
+    height: 380px !important;
   }
 }

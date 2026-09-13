@@ -1,3 +1,6 @@
+// Cafe Woody's — Prisma schema
+// Place at: backend/prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -131,6 +134,7 @@ model Staff {
   voidedGamingSessions GamingSession[]
   refunds        Refund[]
   loyaltyTransactions LoyaltyTransaction[]
+  cashTransactions CashTransaction[]
 }
 
 // ─────────────────────────────────────────────
@@ -696,4 +700,42 @@ model LoyaltyTransaction {
 
   @@index([customerId])
   @@index([billId])
+}
+
+// ─────────────────────────────────────────────
+// Daybook (Phase 26)
+// ─────────────────────────────────────────────
+
+enum CashTransactionType {
+  CASH_IN  // e.g. owner adding float, a miscellaneous cash receipt not tied to a Bill
+  CASH_OUT // e.g. owner draw, a petty cash expense not tied to a PurchaseOrder
+}
+
+// Miscellaneous cash movements that aren't a customer Payment, a
+// Refund, or a PurchasePayment — without this, the daybook can't
+// actually reconcile to real cash-in-hand, since real cafés move cash
+// for reasons the billing/purchasing flow never sees (owner draws,
+// small untracked expenses, float top-ups). Always requires a reason.
+model CashTransaction {
+  id        String              @id @default(uuid())
+  type      CashTransactionType
+  amount    Int                 // paise
+  reason    String              // required — every manual cash movement needs a stated reason
+  staffId   String
+  staff     Staff               @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  createdAt DateTime            @default(now())
+
+  @@index([createdAt])
+}
+
+// Singleton, fetch via findFirst(). The one number that can't be
+// derived from transaction history — everything after this point is
+// computed by summing Payments/Refunds/PurchasePayments/
+// CashTransactions chronologically, never cached.
+model DaybookSettings {
+  id                  String   @id @default(uuid())
+  initialCashBalance  Int      @default(0) // paise, cash-in-hand on the day this app started being used — the one manually-entered starting point
+  trackingStartedAt   DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }

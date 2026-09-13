@@ -1,4 +1,5 @@
 import { businessProfileRepository } from './business-profile.repository.mjs';
+import { broadcastSettingsUpdated } from '../../realtime/broadcast.mjs';
 
 function formatProfile(profile) {
   if (!profile) return null;
@@ -38,6 +39,7 @@ export const businessProfileService = {
     const formatted = formatProfile(updated);
     cachedProfile = formatted;
     cacheExpiry = Date.now() + CACHE_TTL_MS;
+    broadcastSettingsUpdated('BUSINESS_PROFILE', formatted);
     return formatted;
   }
 };

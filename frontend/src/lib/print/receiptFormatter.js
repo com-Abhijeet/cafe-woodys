@@ -133,7 +133,7 @@ export function formatReceipt(bill, profile = {}) {
 
   lines.push(centerText(profile.receiptFooterNote || 'Thank you for visiting Woody\'s!', width));
   lines.push(centerText('Please Come Again!', width));
-  lines.push('\n\n\n');
+  lines.push('\n\n\n\n\n\n');
 
   return lines.join('\n');
 }

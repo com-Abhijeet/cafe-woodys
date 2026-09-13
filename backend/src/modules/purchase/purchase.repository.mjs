@@ -133,7 +133,7 @@ export const purchaseRepository = {
       }
 
       return po;
-    });
+    }, { timeout: 15000, maxWait: 5000 });
   },
 
   async addPaymentWithTransaction(purchaseOrderId, { amount, method, reference }) {
@@ -175,6 +175,6 @@ export const purchaseRepository = {
       });
 
       return payment;
-    });
+    }, { timeout: 15000, maxWait: 5000 });
   }
 };

@@ -1,4 +1,5 @@
 import { paymentSettingsRepository } from './payment-settings.repository.mjs';
+import { broadcastSettingsUpdated } from '../../realtime/broadcast.mjs';
 
 export const paymentSettingsService = {
   async getSettings() {
@@ -6,6 +7,8 @@ export const paymentSettingsService = {
   },
 
   async updateSettings(data) {
-    return paymentSettingsRepository.updateSettings(data);
+    const updated = await paymentSettingsRepository.updateSettings(data);
+    broadcastSettingsUpdated('PAYMENT', updated);
+    return updated;
   }
 };

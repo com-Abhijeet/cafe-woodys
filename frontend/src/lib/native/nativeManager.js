@@ -5,6 +5,7 @@ import { StatusBar, Style } from '@capacitor/status-bar';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { Network } from '@capacitor/network';
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
+import { processBackAction } from './backHandler';
 
 export function isNativeApp() {
   return Capacitor.isNativePlatform();
@@ -18,19 +19,28 @@ export async function initNativeAppListeners(onResync) {
     // Hide Splash Screen after app load
     await SplashScreen.hide().catch(() => {});
 
-    // Set Status Bar to Cafe Woody's Brand Color (#6B3F2A)
+    // Ensure Status Bar DOES NOT overlay WebView (leaves top status bar safe space for Android clock/battery)
+    await StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
     await StatusBar.setBackgroundColor({ color: '#6B3F2A' }).catch(() => {});
     await StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
 
     // Keyboard resize behavior
     await Keyboard.setResizeMode({ mode: KeyboardResize.Body }).catch(() => {});
 
-    // Android Hardware Back Button Handling
+    // Android Hardware Back Button / Swipe Back Gesture Handling
     App.addListener('backButton', ({ canGoBack }) => {
-      if (canGoBack) {
+      // 1. Check if any active modal/workspace registered in back stack
+      const handled = processBackAction();
+      if (handled) {
+        return;
+      }
+
+      // 2. Otherwise navigate browser history if available
+      if (canGoBack && window.history.length > 1) {
         window.history.back();
       } else {
-        App.exitApp();
+        // Prevent accidental app quits unless at root view with no open modals
+        console.log('App root back action reached');
       }
     });
 

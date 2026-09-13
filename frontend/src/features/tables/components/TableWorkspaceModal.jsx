@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useMenu } from '../../menu/hooks/useMenu';
 import { useOrders } from '../../orders/hooks/useOrders';
+import { useBackHandler } from '../../../lib/native/backHandler';
+import { printKitchenSlip } from '../../../lib/print/PrintService';
 import { CategorySidebar } from './CategorySidebar';
 import { MenuItemGrid } from './MenuItemGrid';
 import { OrderTabs } from './OrderTabs';
@@ -15,6 +17,15 @@ export function TableWorkspaceModal({ table, onClose, onRefreshTable }) {
 
   // Workspace View State: 'ORDERING' | 'BILLING'
   const [workspaceView, setWorkspaceView] = useState('ORDERING');
+
+  // Register Android back gesture to close modal / sub-view
+  useBackHandler(() => {
+    if (workspaceView === 'BILLING') {
+      setWorkspaceView('ORDERING');
+    } else {
+      onClose();
+    }
+  });
 
   // Active Workspace Tab when in 'ORDERING' mode: 'ORDER' | 'GAMING'
   const [activeModalTab, setActiveModalTab] = useState('ORDER');
@@ -32,7 +43,11 @@ export function TableWorkspaceModal({ table, onClose, onRefreshTable }) {
     ? menuItems.filter((m) => m.isAvailable)
     : menuItems.filter((m) => m.isAvailable && m.category === selectedCategory);
 
-  const hasUnbilledContent = orders.length > 0 || (table.activePlayersCount && table.activePlayersCount > 0);
+  const hasUnbilledContent =
+    orders.length > 0 ||
+    Boolean(table.activePlayersCount && table.activePlayersCount > 0) ||
+    Boolean(table.gamingSessions && table.gamingSessions.length > 0) ||
+    table.status === 'OCCUPIED';
 
   // Cart Handlers
   const handleAddToCart = (menuItem) => {
@@ -72,9 +87,18 @@ export function TableWorkspaceModal({ table, onClose, onRefreshTable }) {
     }));
 
     try {
-      await submitOrder(itemsPayload);
+      const createdOrder = await submitOrder(itemsPayload);
       setCart([]);
       if (onRefreshTable) onRefreshTable();
+
+      // Trigger KOT printing automatically on order placement
+      if (createdOrder) {
+        try {
+          await printKitchenSlip(createdOrder, null, { table });
+        } catch (pErr) {
+          console.warn('Auto KOT print failed:', pErr);
+        }
+      }
     } catch (err) {
       setActionError(err.message);
     } finally {
@@ -196,6 +220,7 @@ export function TableWorkspaceModal({ table, onClose, onRefreshTable }) {
                   onSubmitOrder={handleSubmitBatchOrder}
                   isSubmitting={isSubmitting}
                   orders={orders}
+                  gamingSessions={table.gamingSessions || []}
                   unbilledFoodTotal={unbilledFoodTotal}
                   onRefreshOrders={refreshOrders}
                 />

@@ -82,6 +82,7 @@ export function AppShell({ activeTab, onSelectTab, children }) {
                 {activeTab === 'BILLS' && 'Bill History & In-Place Payments'}
                 {activeTab === 'SETTINGS' && 'System Settings & Staff Management'}
                 {activeTab === 'REPORTS' && 'Business Analytics & Reports'}
+                {activeTab === 'PRINT_LOGS' && 'Printer & KOT Execution Logs'}
               </h2>
             </div>
 

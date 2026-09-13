@@ -150,3 +150,19 @@
   align-items: center;
   gap: var(--space-2);
 }
+
+.billingGrid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 440px;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  overflow: hidden;
+}
+
+@media (max-width: 900px), (orientation: portrait) {
+  .billingGrid {
+    grid-template-columns: 1fr !important;
+    overflow-y: auto !important;
+  }
+}

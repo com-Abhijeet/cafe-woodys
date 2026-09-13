@@ -7,7 +7,7 @@ import { ListRow } from '../../../components/ui/ListRow';
 import { Users, Search, Plus, Phone, Calendar, Receipt, MessageSquare, Award, Clock } from 'lucide-react';
 import styles from './CustomerCRMManager.module.css';
 
-export function CustomerCRMManager() {
+export function CustomerCRMManager({ onOpenBalances, onOpenLedger }) {
   const [searchQuery, setSearchQuery] = useState('');
   const { customers, isLoading, error, addCustomer, getCustomerProfile } = useCustomers(searchQuery);
 
@@ -63,9 +63,16 @@ export function CustomerCRMManager() {
           <h2 className={styles.title}>Customer CRM Directory</h2>
           <p className={styles.subtitle}>Track returning customer visits, total spend history, loyalty points, and SMS dispatches</p>
         </div>
-        <Button onClick={() => { setActionError(''); setShowAddModal(true); }}>
-          <Plus size={16} /> Add Customer
-        </Button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {onOpenBalances && (
+            <Button variant="secondary" onClick={onOpenBalances}>
+              💳 All Balances
+            </Button>
+          )}
+          <Button onClick={() => { setActionError(''); setShowAddModal(true); }}>
+            <Plus size={16} /> Add Customer
+          </Button>
+        </div>
       </div>
 
       {/* Summary Stats */}
@@ -280,7 +287,17 @@ export function CustomerCRMManager() {
               </div>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-4)' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: 'var(--space-4)' }}>
+              {onOpenLedger && (
+                <Button
+                  onClick={() => {
+                    setShowProfileModal(false);
+                    onOpenLedger(activeProfile.id);
+                  }}
+                >
+                  📜 View Full Ledger Page
+                </Button>
+              )}
               <Button variant="secondary" onClick={() => setShowProfileModal(false)}>Close</Button>
             </div>
           </div>

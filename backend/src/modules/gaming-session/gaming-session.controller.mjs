@@ -37,5 +37,20 @@ export const gamingSessionController = {
     } catch (err) {
       next(err);
     }
+  },
+
+  async quickAddPlayerSessions(req, res, next) {
+    try {
+      const { tableId } = req.params;
+      const { playerCount, durationMinutes, flatAmountOverride } = req.body || {};
+      const sessions = await gamingSessionService.quickAddPlayerSessions(tableId, {
+        playerCount,
+        durationMinutes,
+        flatAmountOverride
+      });
+      return res.status(201).json({ data: sessions });
+    } catch (err) {
+      next(err);
+    }
   }
 };

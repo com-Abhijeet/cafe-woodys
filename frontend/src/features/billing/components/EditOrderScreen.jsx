@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { apiClient } from '../../../lib/apiClient';
+import { useBackHandler } from '../../../lib/native/backHandler';
 import { Button } from '../../../components/ui/Button/Button';
 import { Input } from '../../../components/ui/Input/Input';
 import { ArrowLeft, Ban, RefreshCw, Plus, Edit3, CheckCircle2, AlertCircle, ShoppingBag, Utensils } from 'lucide-react';
 import styles from './CheckoutModal.module.css';
 
 export function EditOrderScreen({ billId, onBack, onDone }) {
+  useBackHandler(onBack);
   const [contextData, setContextData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');

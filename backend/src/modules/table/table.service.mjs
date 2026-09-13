@@ -15,18 +15,18 @@ function enrichTable(table) {
     effectiveHalfHourRate: isGaming ? (table.halfHourRate ?? table.zone?.defaultHalfHourRate ?? null) : null,
     effectiveHourlyRate: isGaming ? (table.hourlyRate ?? table.zone?.defaultHourlyRate ?? null) : null,
     effectiveMaxPlayers: isGaming ? (table.maxPlayers ?? table.zone?.defaultMaxPlayers ?? null) : null,
-    activePlayersCount: table.gamingSessions?.length || 0,
+    activePlayersCount: table.gamingSessions?.filter((s) => s.status === 'ACTIVE').length || 0,
     hasOpenOrders: (table.orders?.length || 0) > 0
   };
 }
 
 export async function canTableBeFreed(tableId, tx = prisma) {
   if (!tableId) return false;
-  const [openOrders, activeSessions] = await Promise.all([
+  const [openOrders, unbilledSessions] = await Promise.all([
     tx.order.count({ where: { tableId, status: 'OPEN' } }),
-    tx.gamingSession.count({ where: { tableId, status: 'ACTIVE' } })
+    tx.gamingSession.count({ where: { tableId, billId: null } })
   ]);
-  return openOrders === 0 && activeSessions === 0;
+  return openOrders === 0 && unbilledSessions === 0;
 }
 
 export const tableService = {

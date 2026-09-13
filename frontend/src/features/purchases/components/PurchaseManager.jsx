@@ -12,7 +12,7 @@ import { Button } from '../../../components/ui/Button/Button';
 import { Truck, ShoppingCart, Plus, CreditCard, Trash2, Building2, Download, Calendar } from 'lucide-react';
 import styles from './PurchaseManager.module.css';
 
-export function PurchaseManager() {
+export function PurchaseManager({ onOpenBalances, onOpenLedger }) {
   const [activeTab, setActiveTab] = useState('PURCHASES'); // 'PURCHASES' | 'PAYMENTS' | 'SUPPLIERS'
 
   const { suppliers, addSupplier, removeSupplier } = useSuppliers();
@@ -223,9 +223,16 @@ export function PurchaseManager() {
               <Plus size={16} /> New Stock Purchase
             </Button>
           ) : activeTab === 'SUPPLIERS' ? (
-            <Button onClick={() => { setActionError(''); setShowSupplierModal(true); }}>
-              <Plus size={16} /> Add Supplier
-            </Button>
+            <>
+              {onOpenBalances && (
+                <Button variant="secondary" onClick={onOpenBalances}>
+                  💳 All Balances
+                </Button>
+              )}
+              <Button onClick={() => { setActionError(''); setShowSupplierModal(true); }}>
+                <Plus size={16} /> Add Supplier
+              </Button>
+            </>
           ) : null}
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { loyaltySettingsRepository } from './loyalty-settings.repository.mjs';
+import { broadcastSettingsUpdated } from '../../realtime/broadcast.mjs';
 
 export const loyaltySettingsService = {
   async getSettings() {
@@ -33,6 +34,8 @@ export const loyaltySettingsService = {
       }
     }
 
-    return loyaltySettingsRepository.updateSettings(data);
+    const updated = await loyaltySettingsRepository.updateSettings(data);
+    broadcastSettingsUpdated('LOYALTY', updated);
+    return updated;
   },
 };

@@ -8,6 +8,7 @@ router.use(requireAuth);
 
 router.get('/', gamingSessionController.getActiveSessions);
 router.post('/', gamingSessionController.startPlayerSession);
+router.post('/quick-add', gamingSessionController.quickAddPlayerSessions);
 router.patch('/:id/close', gamingSessionController.closePlayerSession);
 
 export default router;

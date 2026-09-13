@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useMenu } from '../../menu/hooks/useMenu';
 import { submitParcelOrderApi } from '../../orders/api/orders.api';
+import { useBackHandler } from '../../../lib/native/backHandler';
+import { printKitchenSlip } from '../../../lib/print/PrintService';
 import { CategorySidebar } from './CategorySidebar';
 import { MenuItemGrid } from './MenuItemGrid';
 import { OrderTabs } from './OrderTabs';
@@ -11,6 +13,14 @@ import styles from './TableWorkspaceModal.module.css';
 
 export function ParcelWorkspaceModal({ existingOrder = null, onClose, onRefreshTable }) {
   const [workspaceView, setWorkspaceView] = useState('ORDERING');
+
+  useBackHandler(() => {
+    if (workspaceView === 'BILLING') {
+      setWorkspaceView('ORDERING');
+    } else {
+      onClose();
+    }
+  });
   const { items: menuItems, isLoading: isMenuLoading } = useMenu();
 
   const [selectedCategory, setSelectedCategory] = useState('ALL');
@@ -71,6 +81,15 @@ export function ParcelWorkspaceModal({ existingOrder = null, onClose, onRefreshT
       setCart([]);
       setSubmittedParcelOrder(createdOrder);
       if (onRefreshTable) onRefreshTable();
+
+      // Trigger KOT print automatically on parcel placement
+      if (createdOrder) {
+        try {
+          await printKitchenSlip(createdOrder);
+        } catch (pErr) {
+          console.warn('Auto parcel KOT print failed:', pErr);
+        }
+      }
 
       // Phase 21 Step 4: Takeaway = one order per bill. Transition straight to unified BillingView
       setWorkspaceView('BILLING');

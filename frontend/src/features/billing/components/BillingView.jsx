@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
+import { useSettingsContext } from '../../../context/SettingsContext';
 import { apiClient } from '../../../lib/apiClient';
 import { printReceipt, printKitchenSlip } from '../../../lib/print/PrintService';
+import { useBackHandler } from '../../../lib/native/backHandler';
 import { CustomerResolveField } from '../../customers/components/CustomerResolveField';
 import { KitchenStatusWarningModal } from './KitchenStatusWarningModal';
 import { PaymentModal } from './PaymentModal';
 import { QuickConfigModal } from './QuickConfigModal';
+import QuickAddGamingModal from './QuickAddGamingModal';
 import { UpiQrCode } from './UpiQrCode';
 import { CategorySidebar } from '../../tables/components/CategorySidebar';
 import { MenuItemGrid } from '../../tables/components/MenuItemGrid';
@@ -34,7 +37,8 @@ import {
   SlidersHorizontal,
   Utensils,
   Eye,
-  Award
+  Award,
+  Gamepad2
 } from 'lucide-react';
 import styles from './CheckoutModal.module.css';
 
@@ -53,11 +57,17 @@ const getRemainingPaise = (b) => {
  * 3. Sticky Bottom Action Bar with "Save Bill" 1-transaction commit, Quick Config & Payment Modal
  */
 export function BillingView({ tableId, initialBill = null, onBack, onBillSettled }) {
+  useBackHandler(onBack);
+  const { settings: globalSettings } = useSettingsContext();
   const [bill, setBill] = useState(initialBill);
-  const [businessProfile, setBusinessProfile] = useState(null);
-  const [isLoading, setIsLoading] = useState(!initialBill);
+  const [isLoading, setIsLoading] = useState(!initialBill && !!tableId);
   const [error, setError] = useState('');
   const [successBanner, setSuccessBanner] = useState('');
+
+  const businessProfile = {
+    ...(globalSettings?.businessProfile || {}),
+    ...(globalSettings?.paymentSettings || {})
+  };
 
   // Right Side Workspace Tab: 'LIVE_ITEMS' | 'RECEIPT_PREVIEW'
   const [rightPanelTab, setRightPanelTab] = useState('LIVE_ITEMS');
@@ -68,6 +78,7 @@ export function BillingView({ tableId, initialBill = null, onBack, onBillSettled
   const [customPaymentObj, setCustomPaymentObj] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [showQuickAddGamingModal, setShowQuickAddGamingModal] = useState(false);
 
   // Phase 25 Loyalty State
   const [loyaltySettings, setLoyaltySettings] = useState(null);
@@ -91,24 +102,15 @@ export function BillingView({ tableId, initialBill = null, onBack, onBillSettled
     : menuItems.filter((m) => m.isAvailable && m.category === selectedCategory);
 
   const loadData = async () => {
-    setIsLoading(true);
+    if (!bill && !initialBill) {
+      setIsLoading(true);
+    }
     try {
-      const [profRes, payRes, previewRes] = await Promise.all([
-        apiClient('/business-profile').catch(() => null),
-        apiClient('/payment-settings').catch(() => null),
-        tableId ? apiClient(`/tables/${tableId}/bill-preview`).catch(() => null) : Promise.resolve(null)
-      ]);
-
-      if (profRes || payRes) {
-        setBusinessProfile({
-          ...(profRes || {}),
-          ...(payRes || {})
-        });
-      }
-
-      const targetData = previewRes || initialBill;
-      if (targetData) {
-        setBill(targetData);
+      if (tableId) {
+        const previewRes = await apiClient(`/tables/${tableId}/bill-preview`).catch(() => null);
+        if (previewRes) {
+          setBill(previewRes);
+        }
       }
     } catch (err) {
       setError(err.message || 'Failed to load billing preview');
@@ -159,8 +161,28 @@ export function BillingView({ tableId, initialBill = null, onBack, onBillSettled
   });
 
   // Derived Totals
+  const gamingSessionsList = (bill?.gamingSessions && bill.gamingSessions.length > 0)
+    ? bill.gamingSessions
+    : ((bill?.table?.gamingSessions && bill.table.gamingSessions.length > 0)
+        ? bill.table.gamingSessions
+        : (initialBill?.gamingSessions || []));
   const foodTotalPaise = bill?.foodTotal ?? activeLineItems.reduce((sum, i) => sum + ((i.priceSnapshot || i.menuItem?.price || 0) * i.quantity), 0);
-  const gamingTotalPaise = bill?.gamingTotal ?? 0;
+  const gamingTotalPaise = (bill?.gamingTotal && bill.gamingTotal > 0)
+    ? bill.gamingTotal
+    : gamingSessionsList.reduce((sum, s) => {
+        const startTime = s.startTime ? new Date(s.startTime) : new Date();
+        const endTime = s.endTime ? new Date(s.endTime) : (s.status === 'ACTIVE' ? new Date() : startTime);
+        let elapsedMins = Math.max(1, Math.ceil((endTime - startTime) / (1000 * 60)));
+        const graceMinutes = 5;
+        const remainder = elapsedMins % 30;
+        if (remainder > 0 && remainder <= graceMinutes) elapsedMins -= remainder;
+        const fullHours = Math.floor(elapsedMins / 60);
+        const remMinutes = elapsedMins % 60;
+        let charge = fullHours * (s.hourlyRateSnapshot || 0);
+        if (remMinutes > 0) charge += remMinutes <= 30 ? (s.halfHourRateSnapshot || 0) : (s.hourlyRateSnapshot || 0);
+        if (s.maxChargeCap && s.maxChargeCap > 0) charge = Math.min(charge, s.maxChargeCap);
+        return sum + charge;
+      }, 0);
   const grandTotalPaise = bill?.grandTotal ?? Math.max(0, foodTotalPaise + gamingTotalPaise - (bill?.discountAmount || 0) + (bill?.cgstAmount || 0) + (bill?.sgstAmount || 0));
   const totalPaidPaise = bill?.totalPaid ?? (bill?.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
   const remainingPaise = bill?.remainingBalance ?? Math.max(0, grandTotalPaise - totalPaidPaise);
@@ -458,7 +480,7 @@ export function BillingView({ tableId, initialBill = null, onBack, onBillSettled
       </div>
 
       {/* Main 2-Column Grid: LEFT 70-75% MENU ITEM SELECTOR, RIGHT 25-30% UNIFIED BILL & ITEMS */}
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 440px', gap: 'var(--space-3)', padding: 'var(--space-3)', overflow: 'hidden' }}>
+      <div className={styles.billingGrid}>
 
         {/* LEFT SIDE (70-75% Width): Menu Items Selector (Tap to auto-add or increase dish) */}
         <div style={{ display: 'flex', backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', overflow: 'hidden', boxShadow: 'var(--shadow-card)' }}>
@@ -619,18 +641,18 @@ export function BillingView({ tableId, initialBill = null, onBack, onBillSettled
           {rightPanelTab === 'LIVE_ITEMS' ? (
             /* TAB 1: Live Unified Order Items & Direct In-Line Quantity Controls */
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', flex: 1 }}>
-              <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-3)', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-card)', display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+              <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-3)', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-card)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div style={{ fontSize: 'var(--text-xs)', fontWeight: 800, color: 'var(--color-brand)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>Unified Bill Dishes ({activeLineItems.length})</span>
                   <span>Subtotal: ₹{foodTotalRs}</span>
                 </div>
 
                 {activeLineItems.length === 0 ? (
-                  <div style={{ padding: '24px', textAlign: 'center', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
+                  <div style={{ padding: '16px', textAlign: 'center', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
                     No dishes on this bill yet. Tap any item on the left menu to add!
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', overflowY: 'auto', flex: 1, minHeight: '120px', paddingRight: '4px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', overflowY: 'auto', maxHeight: '240px', paddingRight: '4px' }}>
                     {activeLineItems.map((item) => (
                       <div
                         key={item.id}
@@ -710,6 +732,83 @@ export function BillingView({ tableId, initialBill = null, onBack, onBillSettled
                   </div>
                 )}
               </div>
+
+              {/* Gaming Sessions Section Card */}
+              {(gamingSessionsList.length > 0 || gamingTotalPaise > 0 || bill?.table?.zone?.type === 'GAMING') && (
+                <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-3)', border: '1px solid var(--color-brand)', boxShadow: 'var(--shadow-card)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ fontSize: 'var(--text-xs)', fontWeight: 800, color: 'var(--color-brand)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Gamepad2 size={16} /> Gaming Charges ({gamingSessionsList.length})
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowQuickAddGamingModal(true)}
+                        style={{
+                          padding: '4px 8px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          backgroundColor: 'var(--color-brand)',
+                          color: '#0f172a',
+                          fontWeight: 800,
+                          fontSize: '11px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        + Quick Add
+                      </button>
+                      <span>Subtotal: ₹{gamingTotalRs}</span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {gamingSessionsList.length === 0 ? (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: 'var(--text-xs)' }}>
+                        <span style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>Table Gaming Charge</span>
+                        <strong style={{ color: 'var(--color-brand)' }}>₹{gamingTotalRs}</strong>
+                      </div>
+                    ) : (
+                      gamingSessionsList.map((session) => {
+                        const startTime = session.startTime ? new Date(session.startTime) : new Date();
+                        const endTime = session.endTime ? new Date(session.endTime) : (session.status === 'ACTIVE' ? new Date() : startTime);
+                        let elapsedMins = session.elapsedMinutes || Math.max(1, Math.ceil((endTime - startTime) / (1000 * 60)));
+                        const chargePaise = session.calculatedCharge ?? (() => {
+                          const graceMinutes = 5;
+                          const remainder = elapsedMins % 30;
+                          if (remainder > 0 && remainder <= graceMinutes) elapsedMins -= remainder;
+                          const fullHours = Math.floor(elapsedMins / 60);
+                          const remMinutes = elapsedMins % 60;
+                          let chg = fullHours * (session.hourlyRateSnapshot || 0);
+                          if (remMinutes > 0) chg += remMinutes <= 30 ? (session.halfHourRateSnapshot || 0) : (session.hourlyRateSnapshot || 0);
+                          if (session.maxChargeCap && session.maxChargeCap > 0) chg = Math.min(chg, session.maxChargeCap);
+                          return chg;
+                        })();
+
+                        return (
+                          <div key={session.id || Math.random()} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: 'var(--text-xs)', color: 'var(--color-text-primary)' }}>
+                                {session.playerLabel || 'Player'}
+                                {session.status === 'ACTIVE' ? (
+                                  <span style={{ color: 'var(--color-success)', fontSize: '10px', marginLeft: '6px', fontWeight: 800 }}>(ACTIVE • {elapsedMins}m)</span>
+                                ) : (
+                                  <span style={{ color: 'var(--color-text-secondary)', fontSize: '10px', marginLeft: '6px' }}>({elapsedMins}m)</span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
+                                Rate: ₹{((session.halfHourRateSnapshot || 0) / 100).toFixed(0)}/30m • ₹{((session.hourlyRateSnapshot || 0) / 100).toFixed(0)}/hr
+                              </div>
+                            </div>
+                            <strong style={{ fontSize: 'var(--text-xs)', color: 'var(--color-brand)' }}>
+                              ₹{(chargePaise / 100).toFixed(2)}
+                            </strong>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Payment Settlement Card */}
               <div style={{ backgroundColor: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-3)', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-card)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -813,6 +912,43 @@ export function BillingView({ tableId, initialBill = null, onBack, onBillSettled
                   <span>{(((item.priceSnapshot || item.menuItem?.price || 0) * item.quantity) / 100).toFixed(2)}</span>
                 </div>
               ))}
+
+              {(gamingSessionsList.length > 0 || gamingTotalPaise > 0) && (
+                <>
+                  <div style={{ borderBottom: '1px dashed #111', margin: '6px 0' }} />
+                  <div style={{ fontWeight: 'bold', fontSize: '11px', textTransform: 'uppercase' }}>GAMING CHARGES</div>
+                  {gamingSessionsList.length === 0 ? (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', margin: '3px 0' }}>
+                      <span>Table Gaming Charge</span>
+                      <span>₹{gamingTotalRs}</span>
+                    </div>
+                  ) : (
+                    gamingSessionsList.map((s) => {
+                      const startTime = s.startTime ? new Date(s.startTime) : new Date();
+                      const endTime = s.endTime ? new Date(s.endTime) : (s.status === 'ACTIVE' ? new Date() : startTime);
+                      let elapsedMins = s.elapsedMinutes || Math.max(1, Math.ceil((endTime - startTime) / (1000 * 60)));
+                      const chargePaise = s.calculatedCharge ?? (() => {
+                        const graceMinutes = 5;
+                        const remainder = elapsedMins % 30;
+                        if (remainder > 0 && remainder <= graceMinutes) elapsedMins -= remainder;
+                        const fullHours = Math.floor(elapsedMins / 60);
+                        const remMinutes = elapsedMins % 60;
+                        let chg = fullHours * (s.hourlyRateSnapshot || 0);
+                        if (remMinutes > 0) chg += remMinutes <= 30 ? (s.halfHourRateSnapshot || 0) : (s.hourlyRateSnapshot || 0);
+                        if (s.maxChargeCap && s.maxChargeCap > 0) chg = Math.min(chg, s.maxChargeCap);
+                        return chg;
+                      })();
+
+                      return (
+                        <div key={s.id || Math.random()} style={{ display: 'flex', justifyContent: 'space-between', margin: '3px 0' }}>
+                          <span style={{ maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.playerLabel || 'Player'} ({elapsedMins}m)</span>
+                          <span>₹{(chargePaise / 100).toFixed(2)}</span>
+                        </div>
+                      );
+                    })
+                  )}
+                </>
+              )}
 
               <div style={{ borderBottom: '1px dashed #111', margin: '6px 0' }} />
 
@@ -932,6 +1068,15 @@ export function BillingView({ tableId, initialBill = null, onBack, onBillSettled
           onCancel={() => setShowKitchenModal(false)}
           onConfirmOverride={() => handleSaveBill(null, true)}
           isSubmitting={isSubmitting}
+        />
+      )}
+
+      {showQuickAddGamingModal && (
+        <QuickAddGamingModal
+          isOpen={showQuickAddGamingModal}
+          onClose={() => setShowQuickAddGamingModal(false)}
+          table={bill?.table || { id: tableId, name: 'Table' }}
+          onSuccess={() => loadData()}
         />
       )}
     </div>

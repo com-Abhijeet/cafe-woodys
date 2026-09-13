@@ -1,36 +1,35 @@
 import { useState, useEffect } from 'react';
+import { useSettingsContext } from '../../../context/SettingsContext';
 import { apiClient } from '../../../lib/apiClient';
 import { Button } from '../../../components/ui/Button/Button';
 import { Input } from '../../../components/ui/Input/Input';
 import { Clock, CheckCircle2 } from 'lucide-react';
 
 export function OrderSettingsForm() {
+  const { settings, isLoading, updateSettingModule } = useSettingsContext();
+  const orderData = settings?.orderSettings;
+
   const [orderCancellationWindowSeconds, setOrderCancellationWindowSeconds] = useState('300');
-  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
   useEffect(() => {
-    apiClient('/order-settings')
-      .then((data) => {
-        if (data) {
-          setOrderCancellationWindowSeconds(String(data.orderCancellationWindowSeconds ?? 300));
-        }
-      })
-      .catch((err) => console.error('Failed to fetch order settings:', err))
-      .finally(() => setIsLoading(false));
-  }, []);
+    if (orderData) {
+      setOrderCancellationWindowSeconds(String(orderData.orderCancellationWindowSeconds ?? 300));
+    }
+  }, [orderData]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSaving(true);
     try {
-      await apiClient('/order-settings', {
+      const updated = await apiClient('/order-settings', {
         method: 'PUT',
         body: {
           orderCancellationWindowSeconds: Number(orderCancellationWindowSeconds)
         }
       });
+      updateSettingModule('orderSettings', updated || { orderCancellationWindowSeconds: Number(orderCancellationWindowSeconds) });
       setToastMessage('Order settings saved successfully!');
       setTimeout(() => setToastMessage(''), 3000);
     } catch (err) {
@@ -40,7 +39,7 @@ export function OrderSettingsForm() {
     }
   };
 
-  if (isLoading) return <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>Loading order settings...</p>;
+  if (isLoading && !orderData) return <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>Loading order settings...</p>;
 
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', maxWidth: '640px' }}>

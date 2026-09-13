@@ -1,4 +1,5 @@
 import { taxSettingsRepository } from './tax-settings.repository.mjs';
+import { broadcastSettingsUpdated } from '../../realtime/broadcast.mjs';
 
 export const taxSettingsService = {
   async getSettings() {
@@ -6,6 +7,8 @@ export const taxSettingsService = {
   },
 
   async updateSettings(data) {
-    return taxSettingsRepository.updateSettings(data);
+    const updated = await taxSettingsRepository.updateSettings(data);
+    broadcastSettingsUpdated('TAX', updated);
+    return updated;
   }
 };

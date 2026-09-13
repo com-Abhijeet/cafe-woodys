@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSettingsContext } from '../../../context/SettingsContext';
 import { BusinessProfileForm } from './BusinessProfileForm';
 import { TaxSettingsForm } from './TaxSettingsForm';
 import { PaymentSettingsForm } from './PaymentSettingsForm';
@@ -10,11 +11,12 @@ import { ZoneTableManager } from '../../zones/components/ZoneTableManager';
 import { StaffManager } from '../../auth/components/StaffManager';
 import { DiscountRulesManager } from '../../discounts/components/DiscountRulesManager';
 import { AboutSection } from './AboutSection';
-import { Building2, Percent, CreditCard, Clock, Gamepad2, Printer, Award, LayoutGrid, Users, Tag, Info } from 'lucide-react';
+import { Building2, Percent, CreditCard, Clock, Gamepad2, Printer, Award, LayoutGrid, Users, Tag, Info, RotateCw, CheckCircle2 } from 'lucide-react';
 import styles from './SettingsManager.module.css';
 
 export function SettingsManager() {
   const [activeSubTab, setActiveSubTab] = useState('PROFILE');
+  const { refreshSettings, isRefreshing, lastRefetched } = useSettingsContext();
 
   return (
     <div className={styles.container}>
@@ -22,6 +24,38 @@ export function SettingsManager() {
         <div>
           <h2 className={styles.title}>System Settings & Configuration</h2>
           <p className={styles.subtitle}>Configure store business profile, tax modes, UPI payment rules, order cancellation limits, gaming grace periods, thermal printers, loyalty rules, zone pricing, and staff accounts</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {lastRefetched && (
+            <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <CheckCircle2 size={13} style={{ color: 'var(--color-success)' }} />
+              Auto-synced ({lastRefetched.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })})
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => refreshSettings()}
+            disabled={isRefreshing}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 14px',
+              backgroundColor: 'var(--color-brand)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: 'var(--radius-md)',
+              fontWeight: 700,
+              fontSize: 'var(--text-xs)',
+              cursor: isRefreshing ? 'not-allowed' : 'pointer',
+              opacity: isRefreshing ? 0.7 : 1,
+              transition: 'all 0.2s ease'
+            }}
+            title="Refetch settings from server and sync across devices"
+          >
+            <RotateCw size={15} style={{ animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }} />
+            {isRefreshing ? 'Refreshing...' : 'Refresh Settings'}
+          </button>
         </div>
       </div>
 

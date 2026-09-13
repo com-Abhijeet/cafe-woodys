@@ -1,39 +1,38 @@
 import { useState, useEffect } from 'react';
+import { useSettingsContext } from '../../../context/SettingsContext';
 import { apiClient } from '../../../lib/apiClient';
 import { Button } from '../../../components/ui/Button/Button';
 import { Input } from '../../../components/ui/Input/Input';
 import { Percent, ToggleLeft, ToggleRight, CheckCircle2 } from 'lucide-react';
 
 export function TaxSettingsForm() {
+  const { settings, isLoading, updateSettingModule } = useSettingsContext();
+  const taxData = settings?.taxSettings;
+
   const [defaultGstPercent, setDefaultGstPercent] = useState('5');
   const [pricesIncludeTax, setPricesIncludeTax] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
   useEffect(() => {
-    apiClient('/tax-settings')
-      .then((data) => {
-        if (data) {
-          setDefaultGstPercent(String(data.defaultGstPercent ?? 5));
-          setPricesIncludeTax(Boolean(data.pricesIncludeTax));
-        }
-      })
-      .catch((err) => console.error('Failed to fetch tax settings:', err))
-      .finally(() => setIsLoading(false));
-  }, []);
+    if (taxData) {
+      setDefaultGstPercent(String(taxData.defaultGstPercent ?? 5));
+      setPricesIncludeTax(Boolean(taxData.pricesIncludeTax));
+    }
+  }, [taxData]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSaving(true);
     try {
-      await apiClient('/tax-settings', {
+      const updated = await apiClient('/tax-settings', {
         method: 'PUT',
         body: {
           defaultGstPercent: Number(defaultGstPercent),
           pricesIncludeTax
         }
       });
+      updateSettingModule('taxSettings', updated || { defaultGstPercent: Number(defaultGstPercent), pricesIncludeTax });
       setToastMessage('Tax settings saved successfully!');
       setTimeout(() => setToastMessage(''), 3000);
     } catch (err) {
@@ -43,7 +42,7 @@ export function TaxSettingsForm() {
     }
   };
 
-  if (isLoading) return <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>Loading tax settings...</p>;
+  if (isLoading && !taxData) return <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>Loading tax settings...</p>;
 
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', maxWidth: '640px' }}>

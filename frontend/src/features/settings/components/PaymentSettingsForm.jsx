@@ -1,45 +1,45 @@
 import { useState, useEffect } from 'react';
+import { useSettingsContext } from '../../../context/SettingsContext';
 import { apiClient } from '../../../lib/apiClient';
 import { Button } from '../../../components/ui/Button/Button';
 import { Input } from '../../../components/ui/Input/Input';
 import { CreditCard, ToggleLeft, ToggleRight, CheckCircle2, QrCode } from 'lucide-react';
 
 export function PaymentSettingsForm() {
+  const { settings, isLoading, updateSettingModule } = useSettingsContext();
+  const paymentData = settings?.paymentSettings;
+
   const [upiId, setUpiId] = useState('');
   const [upiPayeeName, setUpiPayeeName] = useState('');
   const [autoMarkBillsPaidInFull, setAutoMarkBillsPaidInFull] = useState(false);
   const [alwaysSaveAndPrint, setAlwaysSaveAndPrint] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
   useEffect(() => {
-    apiClient('/payment-settings')
-      .then((data) => {
-        if (data) {
-          setUpiId(data.upiId || '');
-          setUpiPayeeName(data.upiPayeeName || '');
-          setAutoMarkBillsPaidInFull(Boolean(data.autoMarkBillsPaidInFull));
-          setAlwaysSaveAndPrint(Boolean(data.alwaysSaveAndPrint));
-        }
-      })
-      .catch((err) => console.error('Failed to fetch payment settings:', err))
-      .finally(() => setIsLoading(false));
-  }, []);
+    if (paymentData) {
+      setUpiId(paymentData.upiId || '');
+      setUpiPayeeName(paymentData.upiPayeeName || '');
+      setAutoMarkBillsPaidInFull(Boolean(paymentData.autoMarkBillsPaidInFull));
+      setAlwaysSaveAndPrint(Boolean(paymentData.alwaysSaveAndPrint));
+    }
+  }, [paymentData]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSaving(true);
     try {
-      await apiClient('/payment-settings', {
+      const payload = {
+        upiId: upiId.trim() || null,
+        upiPayeeName: upiPayeeName.trim() || null,
+        autoMarkBillsPaidInFull,
+        alwaysSaveAndPrint
+      };
+      const updated = await apiClient('/payment-settings', {
         method: 'PUT',
-        body: {
-          upiId: upiId.trim() || null,
-          upiPayeeName: upiPayeeName.trim() || null,
-          autoMarkBillsPaidInFull,
-          alwaysSaveAndPrint
-        }
+        body: payload
       });
+      updateSettingModule('paymentSettings', updated || payload);
       setToastMessage('Payment settings saved successfully!');
       setTimeout(() => setToastMessage(''), 3000);
     } catch (err) {
@@ -49,7 +49,7 @@ export function PaymentSettingsForm() {
     }
   };
 
-  if (isLoading) return <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>Loading payment settings...</p>;
+  if (isLoading && !paymentData) return <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>Loading payment settings...</p>;
 
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', maxWidth: '640px' }}>

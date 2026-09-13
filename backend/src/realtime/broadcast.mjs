@@ -28,3 +28,7 @@ export function broadcastBillCreated(bill) {
 export function broadcastInventoryLowStock({ itemId, itemName, currentStock, reorderThreshold }) {
   broadcastMessage(WS_EVENTS.INVENTORY_LOW_STOCK, { itemId, itemName, currentStock, reorderThreshold });
 }
+
+export function broadcastSettingsUpdated(settingsType, data) {
+  broadcastMessage(WS_EVENTS.SETTINGS_UPDATED, { settingsType, data, timestamp: new Date().toISOString() });
+}

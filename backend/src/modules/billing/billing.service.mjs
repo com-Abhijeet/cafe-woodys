@@ -160,7 +160,7 @@ export const billingService = {
         include: { items: { include: { menuItem: true } } }
       });
       unbilledSessions = await prisma.gamingSession.findMany({
-        where: { tableId: targetId, billId: null }
+        where: { tableId: targetId, billId: null, voidedAt: null }
       });
     } else if (targetId) {
       const singleOrder = await prisma.order.findUnique({
@@ -177,8 +177,11 @@ export const billingService = {
       throw new NotFoundError('Table or Order not found for billing preview', 'NOT_FOUND');
     }
 
-    const taxSettings = await taxSettingsService.getSettings();
-    const gamingSettings = await gamingSettingsService.getSettings();
+    const [taxSettings, gamingSettings, unfinishedKitchenOrders] = await Promise.all([
+      taxSettingsService.getSettings(),
+      gamingSettingsService.getSettings(),
+      this.checkKitchenStatus(targetId)
+    ]);
     const graceMinutes = gamingSettings?.gamingGracePeriodMinutes ?? 5;
     const pricesIncludeTax = Boolean(taxSettings?.pricesIncludeTax);
     const now = new Date();
@@ -199,6 +202,7 @@ export const billingService = {
     }
 
     let gamingTotal = 0;
+    const enrichedUnbilledSessions = [];
     for (const session of unbilledSessions) {
       const sessionEndTime = (session.status === 'ACTIVE' || !session.endTime) ? now : session.endTime;
       const elapsedMinutes = Math.max(1, Math.ceil((sessionEndTime - new Date(session.startTime)) / (1000 * 60)));
@@ -209,7 +213,15 @@ export const billingService = {
         session.maxChargeCap,
         graceMinutes
       );
+      if (session.status === 'CLOSED' && charge === 0) {
+        continue;
+      }
       gamingTotal += charge;
+      enrichedUnbilledSessions.push({
+        ...session,
+        elapsedMinutes,
+        calculatedCharge: charge
+      });
       lines.push({
         subtotal: charge,
         gstPercent: Number(session.gstPercentSnapshot || 18)
@@ -239,8 +251,6 @@ export const billingService = {
       ? Math.max(0, grossSubtotal - discountAmount)
       : Math.max(0, grossSubtotal - discountAmount) + totalCgst + totalSgst;
 
-    const unfinishedKitchenOrders = await this.checkKitchenStatus(targetId);
-
     return {
       table: { id: table?.id || null, name: table?.name || 'Parcel Order', zone: table?.zone || { name: 'PARCEL / TAKEAWAY' } },
       foodTotal,
@@ -252,7 +262,7 @@ export const billingService = {
       sgstAmount: totalSgst,
       grandTotal,
       orders: openOrders,
-      gamingSessions: unbilledSessions,
+      gamingSessions: enrichedUnbilledSessions,
       unfinishedKitchenOrders,
       pricesIncludeTax
     };
@@ -276,7 +286,7 @@ export const billingService = {
         include: { items: true }
       });
       unbilledSessions = await prisma.gamingSession.findMany({
-        where: { tableId: targetId, billId: null }
+        where: { tableId: targetId, billId: null, voidedAt: null }
       });
     } else {
       const singleOrder = await prisma.order.findUnique({
@@ -305,13 +315,15 @@ export const billingService = {
     for (const session of unbilledSessions) {
       const sessionEndTime = (session.status === 'ACTIVE' || !session.endTime) ? now : session.endTime;
       const elapsedMinutes = Math.max(1, Math.ceil((sessionEndTime - new Date(session.startTime)) / (1000 * 60)));
-      gamingTotal += calculateSlotCharge(
+      const charge = calculateSlotCharge(
         elapsedMinutes,
         session.halfHourRateSnapshot,
         session.hourlyRateSnapshot,
         session.maxChargeCap,
         graceMinutes
       );
+      if (session.status === 'CLOSED' && charge === 0) continue;
+      gamingTotal += charge;
     }
 
     const grossTotal = foodTotal + gamingTotal;
@@ -419,13 +431,15 @@ export const billingService = {
         });
 
         unbilledSessions = await tx.gamingSession.findMany({
-          where: { tableId: targetId, billId: null }
+          where: { tableId: targetId, billId: null, voidedAt: null }
         });
       } else if (singleOrder) {
         openOrders = [singleOrder];
       }
 
       const sessionChargesList = [];
+      const zeroChargeGhostSessionsToVoid = [];
+
       for (const session of unbilledSessions) {
         let sessionEndTime = session.endTime;
         if (session.status === 'ACTIVE' || !sessionEndTime) {
@@ -444,9 +458,25 @@ export const billingService = {
           session.maxChargeCap,
           graceMinutes
         );
+
+        if (session.status === 'CLOSED' && charge === 0) {
+          zeroChargeGhostSessionsToVoid.push(session.id);
+          continue;
+        }
+
         sessionChargesList.push({
           charge,
           gstPercent: Number(session.gstPercentSnapshot || 18)
+        });
+      }
+
+      if (zeroChargeGhostSessionsToVoid.length > 0) {
+        await tx.gamingSession.updateMany({
+          where: { id: { in: zeroChargeGhostSessionsToVoid } },
+          data: {
+            voidedAt: now,
+            voidReason: 'Auto-cleared zero-charge closed ghost session'
+          }
         });
       }
 
@@ -636,7 +666,7 @@ export const billingService = {
       }
 
       return bill;
-    });
+    }, { timeout: 20000, maxWait: 5000 });
 
     const fullBill = await this.getBillById(createdBill.id);
     if (table) {
@@ -694,10 +724,14 @@ export const billingService = {
         data: { billId: null, status: 'OPEN' }
       });
 
-      // 4. Unlink attached Gaming Sessions (billId -> null)
+      // 4. Void attached Gaming Sessions so they don't linger as unbilled ghost sessions
       await tx.gamingSession.updateMany({
         where: { billId },
-        data: { billId: null }
+        data: {
+          billId: null,
+          voidedAt: new Date(),
+          voidReason: `Voided along with Bill #${existingBill.invoiceNumber || existingBill.id.slice(-6)}`
+        }
       });
 
       // 5. Reconcile table status (OCCUPIED if open orders/sessions exist, FREE if clean)
@@ -708,7 +742,7 @@ export const billingService = {
           data: { status: isFree ? 'FREE' : 'OCCUPIED' }
         });
       }
-    });
+    }, { timeout: 20000, maxWait: 5000 });
 
     const fullBill = await this.getBillById(billId);
     if (existingBill.tableId) {
@@ -825,7 +859,7 @@ export const billingService = {
       }
 
       return payment;
-    });
+    }, { timeout: 15000, maxWait: 5000 });
 
     const fullBill = await this.getBillById(billId);
     if (existingBill.tableId) {

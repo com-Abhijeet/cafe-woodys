@@ -1,0 +1,212 @@
+.container {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  background: var(--color-bg-dark, #0f172a);
+  min-height: 100vh;
+  color: #fff;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.headerTitle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.backBtn {
+  background: var(--color-surface, #1e293b);
+  border: 1px solid var(--color-border, #334155);
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.headerTitle h2 {
+  font-size: 1.4rem;
+  margin: 0;
+}
+
+.phoneTag {
+  background: rgba(234, 179, 8, 0.15);
+  color: var(--color-primary, #eab308);
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.exportBtn {
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border, #334155);
+  background: var(--color-surface, #1e293b);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.errorBanner {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid #ef4444;
+  color: #fca5a5;
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.loading {
+  padding: 40px;
+  text-align: center;
+  color: var(--color-text-secondary, #94a3b8);
+}
+
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.metricCard {
+  background: var(--color-surface, #1e293b);
+  border: 1px solid var(--color-border, #334155);
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.metricLabel {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-secondary, #94a3b8);
+  text-transform: uppercase;
+}
+
+.metricValue {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.paidCard .metricValue {
+  color: #4ade80;
+}
+
+.dueCard {
+  border-color: #ef4444;
+}
+
+.dueCard .metricValue {
+  color: #fca5a5;
+}
+
+.tableSection {
+  background: var(--color-surface, #1e293b);
+  border: 1px solid var(--color-border, #334155);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.tableHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.tableHeader h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.countBadge {
+  font-size: 0.8rem;
+  background: var(--color-bg-dark, #0f172a);
+  padding: 4px 10px;
+  border-radius: 12px;
+  color: var(--color-text-secondary, #94a3b8);
+}
+
+.tableWrapper {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.table th,
+.table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--color-border, #334155);
+}
+
+.table th {
+  text-align: left;
+  color: var(--color-text-secondary, #94a3b8);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+}
+
+.timeCell {
+  color: var(--color-text-secondary, #94a3b8);
+  font-family: monospace;
+}
+
+.typeBadge {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.badgeBill {
+  background: rgba(234, 179, 8, 0.15);
+  color: #fde047;
+}
+
+.badgePayment {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+
+.refCell {
+  color: #fff;
+}
+
+.numCell {
+  font-weight: 600;
+}
+
+.debitCell {
+  color: #fde047;
+}
+
+.creditCell {
+  color: #4ade80;
+}
+
+.balanceCell {
+  color: #fff;
+  font-weight: 700;
+}
+
+.emptyCell {
+  text-align: center;
+  padding: 30px;
+  color: var(--color-text-secondary, #94a3b8);
+}

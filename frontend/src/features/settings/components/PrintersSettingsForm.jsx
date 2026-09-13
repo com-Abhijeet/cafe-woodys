@@ -136,7 +136,7 @@ export function PrintersSettingsForm() {
       name,
       purpose,
       connectionType,
-      ipAddress: connectionType === 'TCP' ? ipAddress : null,
+      ipAddress: (connectionType === 'TCP' || connectionType === 'BLUETOOTH') ? ipAddress : null,
       paperWidthMm: parseInt(paperWidthMm, 10) || 80,
       charsPerLineOverride: charsPerLineOverride ? parseInt(charsPerLineOverride, 10) : null,
       isEnabled,
@@ -357,6 +357,16 @@ export function PrintersSettingsForm() {
                 value={ipAddress}
                 onChange={(e) => setIpAddress(e.target.value)}
                 placeholder="e.g. 192.168.1.100"
+                required
+              />
+            )}
+
+            {connectionType === 'BLUETOOTH' && (
+              <Input
+                label="Bluetooth Printer Name or MAC Address"
+                value={ipAddress}
+                onChange={(e) => setIpAddress(e.target.value)}
+                placeholder="e.g. TVS RP 3230 or 00:11:22:33:44:55"
                 required
               />
             )}

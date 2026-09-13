@@ -3,6 +3,7 @@ import { useBilling } from '../hooks/useBilling';
 import { useAuth } from '../../../hooks/useAuth';
 import { useBusinessProfile } from '../../settings/hooks/useBusinessProfile';
 import { printReceipt } from '../../../lib/print/PrintService';
+import { useBackHandler } from '../../../lib/native/backHandler';
 import { formatInvoiceNumber } from '../../../lib/invoiceFormat';
 import { recordRefundApi, fetchBillApi } from '../api/billing.api';
 import { UpiQrCode } from './UpiQrCode';
@@ -12,6 +13,7 @@ import { X, Receipt, Printer, CreditCard, User, AlertOctagon, Ban, ArrowRightLef
 import styles from './CheckoutModal.module.css';
 
 export function BillDetailModal({ bill: initialBill, onClose, onRefresh }) {
+  useBackHandler(onClose);
   const { user } = useAuth();
   const { currentBill, submitPayment, voidBill } = useBilling();
   const { profile } = useBusinessProfile();

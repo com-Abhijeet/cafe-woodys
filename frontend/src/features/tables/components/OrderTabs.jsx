@@ -9,6 +9,7 @@ export function OrderTabs({
   onSubmitOrder,
   isSubmitting,
   orders,
+  gamingSessions = [],
   unbilledFoodTotal,
   onRefreshOrders
 }) {
@@ -21,6 +22,8 @@ export function OrderTabs({
     await onSubmitOrder();
     setActiveOrderTab('HISTORY');
   };
+
+  const totalHistoryCount = orders.length + gamingSessions.length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -70,7 +73,7 @@ export function OrderTabs({
             cursor: 'pointer'
           }}
         >
-          <Utensils size={14} /> Order History ({orders.length})
+          <Utensils size={14} /> Order History ({totalHistoryCount})
         </button>
       </div>
 
@@ -91,7 +94,7 @@ export function OrderTabs({
             flexShrink: 0
           }}
         >
-          <span>Submitted History: <strong>{orders.length} order(s)</strong> (₹{(unbilledFoodTotal / 100).toFixed(2)})</span>
+          <span>History: <strong>{orders.length} food order(s)</strong>{gamingSessions.length > 0 ? `, ${gamingSessions.length} gaming session(s)` : ''}</span>
           <span style={{ color: 'var(--color-brand)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '2px' }}>
             View <ChevronRight size={12} />
           </span>
@@ -131,6 +134,7 @@ export function OrderTabs({
         ) : (
           <SubmittedOrdersList
             orders={orders}
+            gamingSessions={gamingSessions}
             unbilledFoodTotal={unbilledFoodTotal}
             onRefreshOrders={onRefreshOrders}
           />

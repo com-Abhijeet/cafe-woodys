@@ -36,7 +36,14 @@ export async function printNative(formattedText, printerConfig = {}) {
     if (connectionType === 'usb') {
       payload = { type: 'usb', text: preparedText };
     } else if (connectionType === 'bluetooth') {
-      payload = { type: 'bluetooth', address: printerConfig.ipAddress || '', text: preparedText };
+      const btTarget = printerConfig.ipAddress || printerConfig.name || '';
+      payload = {
+        type: 'bluetooth',
+        address: btTarget,
+        deviceName: btTarget,
+        name: btTarget,
+        text: preparedText
+      };
     } else {
       payload = {
         type: 'tcp',

@@ -1,5 +1,16 @@
 {
   "appId": "com.cafewoodys.app",
   "appName": "Cafe Woody's",
-  "webDir": "dist"
+  "webDir": "dist",
+  "plugins": {
+    "StatusBar": {
+      "overlaysWebView": false,
+      "backgroundColor": "#6B3F2A",
+      "style": "DARK"
+    },
+    "Keyboard": {
+      "resize": "body",
+      "style": "DARK"
+    }
+  }
 }

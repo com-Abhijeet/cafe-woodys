@@ -1,5 +1,6 @@
 import { printerRepository } from './printer.repository.mjs';
 import { NotFoundError } from '../../shared/errors/not-found-error.mjs';
+import { broadcastSettingsUpdated } from '../../realtime/broadcast.mjs';
 
 export const printerService = {
   async listPrinters() {
@@ -19,16 +20,22 @@ export const printerService = {
   },
 
   async createPrinter(data) {
-    return printerRepository.create(data);
+    const created = await printerRepository.create(data);
+    broadcastSettingsUpdated('PRINTERS', created);
+    return created;
   },
 
   async updatePrinter(id, data) {
     await this.getPrinterById(id);
-    return printerRepository.update(id, data);
+    const updated = await printerRepository.update(id, data);
+    broadcastSettingsUpdated('PRINTERS', updated);
+    return updated;
   },
 
   async deletePrinter(id) {
     await this.getPrinterById(id);
-    return printerRepository.delete(id);
+    const deleted = await printerRepository.delete(id);
+    broadcastSettingsUpdated('PRINTERS', deleted);
+    return deleted;
   }
 };

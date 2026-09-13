@@ -8,7 +8,7 @@ export const tableRepository = {
       include: {
         zone: true,
         gamingSessions: {
-          where: { status: 'ACTIVE' }
+          where: { billId: null }
         },
         orders: {
           where: { status: 'OPEN' }
@@ -24,7 +24,7 @@ export const tableRepository = {
       include: {
         zone: true,
         gamingSessions: {
-          where: { status: 'ACTIVE' }
+          where: { billId: null }
         },
         orders: {
           where: { status: 'OPEN' },
@@ -52,7 +52,7 @@ export const tableRepository = {
       include: {
         zone: true,
         gamingSessions: {
-          where: { status: 'ACTIVE' }
+          where: { billId: null }
         }
       }
     });

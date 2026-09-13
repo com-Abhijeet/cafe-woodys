@@ -54,5 +54,35 @@ export const supplierController = {
     } catch (err) {
       next(err);
     }
+  },
+
+  async getSupplierBalances(req, res, next) {
+    try {
+      const { sort } = req.query;
+      const balances = await supplierService.getSupplierBalances({ sort });
+      return res.json({ data: balances });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async getSupplierLedger(req, res, next) {
+    try {
+      const ledger = await supplierService.getSupplierLedger(req.params.id);
+      return res.json({ data: ledger });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async exportSupplierLedgerCsv(req, res, next) {
+    try {
+      const csv = await supplierService.exportSupplierLedgerCsv(req.params.id);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="supplier-ledger-${req.params.id}.csv"`);
+      return res.status(200).send(csv);
+    } catch (err) {
+      next(err);
+    }
   }
 };

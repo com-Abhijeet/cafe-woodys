@@ -7,6 +7,7 @@ import { printNative } from './nativePrinter';
 import { printBillViaRawBT } from '../rawbtPrinter';
 import { webFallback } from './webFallback';
 import { apiClient } from '../apiClient';
+import { logPrintEvent } from './printLogger';
 
 export async function detectConnector() {
   try {
@@ -44,88 +45,117 @@ export async function printReceipt(bill, customPrinterConfig = null) {
   const printerConfig = customPrinterConfig || (await resolvePrinterConfig('BILLING'));
   const formattedText = formatReceiptText(bill);
   const connectionType = (printerConfig.connectionType || '').toUpperCase();
+  const targetPrinterName = printerConfig.name || `Billing Printer (${connectionType || 'DEFAULT'})`;
 
-  // If RAWBT is explicitly set in settings
-  if (connectionType === 'RAWBT') {
-    return printBillViaRawBT(formattedText, { businessProfile: printerConfig.businessProfile });
-  }
-
-  // 1. Native Capacitor Thermal Printing (Android App - USB, TCP, Bluetooth, RawBT)
-  if (Capacitor.isNativePlatform()) {
-    try {
-      const result = await printNative(formattedText, printerConfig);
-      return result;
-    } catch (err) {
-      console.error('PrintService native exception isolated:', err);
-      return printBillViaRawBT(formattedText, { businessProfile: printerConfig.businessProfile });
-    }
-  }
-
-  // 2. PC Print Connector Companion App (Windows/Mac Counter Browser)
-  const hasConnector = await detectConnector();
-  if (hasConnector) {
-    try {
-      const response = await fetch('http://localhost:9200/print', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: formattedText, bill })
-      });
-      const data = await response.json();
-      if (response.ok && data.success) {
-        return { success: true, method: 'PC_CONNECTOR' };
+  let res;
+  try {
+    if (connectionType === 'RAWBT') {
+      res = await printBillViaRawBT(formattedText, { businessProfile: printerConfig.businessProfile });
+    } else if (Capacitor.isNativePlatform()) {
+      try {
+        res = await printNative(formattedText, printerConfig);
+      } catch (err) {
+        console.error('PrintService native exception isolated:', err);
+        res = await printBillViaRawBT(formattedText, { businessProfile: printerConfig.businessProfile });
       }
-      console.warn('PC Print Connector returned error:', data.error);
-    } catch (err) {
-      console.warn('Failed to communicate with PC Print Connector:', err.message);
+    } else {
+      const hasConnector = await detectConnector();
+      if (hasConnector) {
+        try {
+          const response = await fetch('http://localhost:9200/print', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: formattedText, bill })
+          });
+          const data = await response.json();
+          if (response.ok && data.success) {
+            res = { success: true, method: 'PC_CONNECTOR' };
+          } else {
+            res = { success: false, error: data.error || 'PC Print Connector failed' };
+          }
+        } catch (err) {
+          res = { success: false, error: err.message };
+        }
+      } else {
+        res = await webFallback(formattedText);
+      }
     }
+  } catch (err) {
+    res = { success: false, error: err.message };
   }
 
-  // 3. Web Fallback (Browser / Waiter Phone / Kitchen Display)
-  return webFallback(formattedText);
+  logPrintEvent({
+    purpose: 'RECEIPT',
+    status: res.success ? 'SENT' : (res.isWebFallback ? 'WEB_FALLBACK' : 'ERROR'),
+    method: res.method || connectionType || 'WEB',
+    formattedText,
+    targetPrinter: targetPrinterName,
+    error: res.error,
+    orderId: bill.id
+  });
+
+  return res;
 }
 
 // Phase 20 Step 5 & Phase 21 Step 3: Kitchen Slip Printing (Price-free prep/packing slip with Fallback Routing)
-export async function printKitchenSlip(orderOrBill, customPrinterConfig = null) {
+export async function printKitchenSlip(orderOrBill, customPrinterConfig = null, options = {}) {
   if (!orderOrBill) {
     return { success: false, error: 'No order provided for kitchen slip printing' };
   }
 
-  // Phase 21 Step 3: Resolves KITCHEN printer first, falling back to BILLING printer
   const printerConfig = customPrinterConfig || (await resolvePrinterConfig('KITCHEN'));
-  const formattedText = formatKitchenSlipText(orderOrBill);
+  const formattedText = formatKitchenSlipText(orderOrBill, options);
   const connectionType = (printerConfig.connectionType || '').toUpperCase();
+  const targetPrinterName = printerConfig.name || `Kitchen Printer (${connectionType || 'DEFAULT'})`;
 
-  if (connectionType === 'RAWBT') {
-    return printBillViaRawBT(formattedText, { businessProfile: printerConfig.businessProfile });
-  }
-
-  if (Capacitor.isNativePlatform()) {
-    try {
-      return await printNative(formattedText, printerConfig);
-    } catch (err) {
-      console.warn('Native kitchen printing failed, falling back to RawBT:', err.message);
-      return printBillViaRawBT(formattedText, { businessProfile: printerConfig.businessProfile });
-    }
-  }
-
-  const hasConnector = await detectConnector();
-  if (hasConnector) {
-    try {
-      const response = await fetch('http://localhost:9200/print', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: formattedText })
-      });
-      const data = await response.json();
-      if (response.ok && data.success) {
-        return { success: true, method: 'PC_CONNECTOR' };
+  let res;
+  try {
+    if (connectionType === 'RAWBT') {
+      res = await printBillViaRawBT(formattedText, { businessProfile: printerConfig.businessProfile });
+    } else if (Capacitor.isNativePlatform()) {
+      try {
+        res = await printNative(formattedText, printerConfig);
+      } catch (err) {
+        console.warn('Native kitchen printing failed, falling back to RawBT:', err.message);
+        res = await printBillViaRawBT(formattedText, { businessProfile: printerConfig.businessProfile });
       }
-    } catch (err) {
-      console.warn('Failed to communicate with PC Print Connector:', err.message);
+    } else {
+      const hasConnector = await detectConnector();
+      if (hasConnector) {
+        try {
+          const response = await fetch('http://localhost:9200/print', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: formattedText })
+          });
+          const data = await response.json();
+          if (response.ok && data.success) {
+            res = { success: true, method: 'PC_CONNECTOR' };
+          } else {
+            res = { success: false, error: data.error || 'PC Print Connector failed' };
+          }
+        } catch (err) {
+          res = { success: false, error: err.message };
+        }
+      } else {
+        res = await webFallback(formattedText);
+      }
     }
+  } catch (err) {
+    res = { success: false, error: err.message };
   }
 
-  return webFallback(formattedText);
+  logPrintEvent({
+    purpose: 'KOT',
+    status: res.success ? 'SENT' : (res.isWebFallback ? 'WEB_FALLBACK' : 'ERROR'),
+    method: res.method || connectionType || 'WEB',
+    formattedText,
+    targetPrinter: targetPrinterName,
+    error: res.error,
+    orderId: orderOrBill.id
+  });
+
+  return res;
 }
 
 // Phase 20 Step 3 & Phase 21 Step 3: Dual-Slip Printing for Parcel Bills

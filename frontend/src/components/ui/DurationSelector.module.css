@@ -1,0 +1,63 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm, 8px);
+  margin-bottom: var(--spacing-md, 16px);
+}
+
+.label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-secondary, #94a3b8);
+}
+
+.presetsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.presetBtn {
+  padding: 10px 12px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--color-border, #334155);
+  background: var(--color-surface, #1e293b);
+  color: var(--color-text-primary, #f8fafc);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.presetBtn:hover {
+  border-color: var(--color-primary, #eab308);
+}
+
+.presetBtn.active {
+  background: var(--color-primary, #eab308);
+  color: #0f172a;
+  font-weight: 700;
+  border-color: var(--color-primary, #eab308);
+}
+
+.customGroup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.customLabel {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary, #94a3b8);
+}
+
+.customInput {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--color-border, #334155);
+  background: var(--color-bg-dark, #0f172a);
+  color: #fff;
+  font-size: 0.9rem;
+}

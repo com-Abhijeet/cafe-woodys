@@ -194,5 +194,63 @@ export const gamingSessionService = {
       elapsedMinutes,
       calculatedCharge
     };
+  },
+
+  async quickAddPlayerSessions(tableId, { playerCount = 1, durationMinutes = 60, flatAmountOverride = null }) {
+    const table = await tableService.getTableById(tableId);
+    if (!table) {
+      throw new NotFoundError('Table not found', 'TABLE_NOT_FOUND');
+    }
+
+    if (table.zone?.type !== 'GAMING') {
+      throw new ValidationError('Quick-add gaming charges can only be added to Gaming Zone tables', 'NOT_GAMING_TABLE');
+    }
+
+    const count = parseInt(playerCount, 10);
+    const duration = parseInt(durationMinutes, 10);
+
+    if (isNaN(count) || count < 1) {
+      throw new ValidationError('Player count must be at least 1', 'INVALID_PLAYER_COUNT');
+    }
+    if (isNaN(duration) || duration < 1) {
+      throw new ValidationError('Duration minutes must be greater than 0', 'INVALID_DURATION');
+    }
+
+    const taxSettings = await taxSettingsService.getSettings();
+    const defaultGst = taxSettings ? Number(taxSettings.defaultGstPercent) : 5;
+    const gstPercentSnapshot = table.zone?.gstPercent != null ? Number(table.zone.gstPercent) : defaultGst;
+
+    const halfHourRateSnapshot = table.effectiveHalfHourRate || 0;
+    const hourlyRateSnapshot = table.effectiveHourlyRate || 0;
+
+    const now = new Date();
+    const startTime = new Date(now.getTime() - duration * 60 * 1000);
+    const endTime = now;
+
+    const createdSessions = [];
+
+    for (let i = 1; i <= count; i++) {
+      const session = await gamingSessionRepository.create({
+        tableId,
+        playerLabel: `Quick Add P${i}`,
+        halfHourRateSnapshot,
+        hourlyRateSnapshot,
+        maxChargeCap: flatAmountOverride ? Math.round(flatAmountOverride / count) : (table.maxChargeCap || null),
+        gstPercentSnapshot,
+        status: 'CLOSED',
+        startTime,
+        endTime
+      });
+      createdSessions.push(session);
+    }
+
+    if (table.status === 'FREE') {
+      await tableRepository.update(tableId, { status: 'OCCUPIED' });
+    }
+
+    const updatedTable = await tableService.getTableById(tableId);
+    broadcastTableUpdate(updatedTable);
+
+    return createdSessions;
   }
 };

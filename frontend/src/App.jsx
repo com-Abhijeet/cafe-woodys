@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { AuthProvider } from './context/AuthContext';
 import { WebSocketProvider } from './context/WebSocketContext';
+import { SettingsProvider } from './context/SettingsContext';
 import { ProtectedRoute } from './components/layout/ProtectedRoute';
 import { MainLayout } from './components/layout/MainLayout';
 import { initNativeAppListeners } from './lib/native/nativeManager';
@@ -15,9 +16,11 @@ function App() {
   return (
     <AuthProvider>
       <WebSocketProvider>
-        <ProtectedRoute>
-          <MainLayout />
-        </ProtectedRoute>
+        <SettingsProvider>
+          <ProtectedRoute>
+            <MainLayout />
+          </ProtectedRoute>
+        </SettingsProvider>
       </WebSocketProvider>
     </AuthProvider>
   );

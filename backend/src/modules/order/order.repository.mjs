@@ -106,13 +106,13 @@ export const orderRepository = {
       return tx.order.findUnique({
         where: { id: item.orderId },
         include: {
-          table: { select: { id: true, name: true } },
+          table: { select: { id: true, name: true, zone: { select: { id: true, name: true, type: true } } } },
           staff: { select: { id: true, username: true } },
           customer: { select: { id: true, name: true, phone: true } },
           items: { include: { menuItem: true, voidedByStaff: { select: { id: true, username: true } } } }
         }
       });
-    });
+    }, { timeout: 15000, maxWait: 5000 });
   },
 
   async voidAndReplaceOrderItemWithTransaction(orderItemId, staffId, { reason, replacement }) {
@@ -182,13 +182,13 @@ export const orderRepository = {
       return tx.order.findUnique({
         where: { id: oldItem.orderId },
         include: {
-          table: { select: { id: true, name: true } },
+          table: { select: { id: true, name: true, zone: { select: { id: true, name: true, type: true } } } },
           staff: { select: { id: true, username: true } },
           customer: { select: { id: true, name: true, phone: true } },
           items: { include: { menuItem: true, voidedByStaff: { select: { id: true, username: true } } } }
         }
       });
-    });
+    }, { timeout: 15000, maxWait: 5000 });
   },
 
   async addOrderItemToOrderWithTransaction(orderId, { menuItemId, quantity, priceOverride }) {
@@ -228,13 +228,13 @@ export const orderRepository = {
       return tx.order.findUnique({
         where: { id: orderId },
         include: {
-          table: { select: { id: true, name: true } },
+          table: { select: { id: true, name: true, zone: { select: { id: true, name: true, type: true } } } },
           staff: { select: { id: true, username: true } },
           customer: { select: { id: true, name: true, phone: true } },
           items: { include: { menuItem: true, voidedByStaff: { select: { id: true, username: true } } } }
         }
       });
-    });
+    }, { timeout: 15000, maxWait: 5000 });
   },
 
   async findActiveUnbilledOrders({ type = 'all' } = {}) {
@@ -288,7 +288,7 @@ export const orderRepository = {
     return prisma.order.findMany({
       where,
       include: {
-        table: { select: { id: true, name: true } },
+        table: { select: { id: true, name: true, zone: { select: { id: true, name: true, type: true } } } },
         staff: { select: { id: true, username: true } },
         customer: { select: { id: true, name: true, phone: true } },
         items: { include: { menuItem: true, voidedByStaff: { select: { id: true, username: true } } } }
@@ -307,7 +307,7 @@ export const orderRepository = {
         ]
       },
       include: {
-        table: { select: { id: true, name: true } },
+        table: { select: { id: true, name: true, zone: { select: { id: true, name: true, type: true } } } },
         items: { select: { id: true, quantity: true, voidedAt: true } }
       },
       orderBy: { createdAt: 'desc' }
@@ -342,7 +342,7 @@ export const orderRepository = {
         data: { status: 'FREE' }
       });
 
-      // 4. Close any active gaming sessions
+      // 4. Close any active gaming sessions and clear unbilled gaming sessions
       await tx.gamingSession.updateMany({
         where: { status: 'ACTIVE' },
         data: {
@@ -351,8 +351,16 @@ export const orderRepository = {
         }
       });
 
+      await tx.gamingSession.updateMany({
+        where: { billId: null, voidedAt: null },
+        data: {
+          voidedAt: now,
+          voidReason: 'Auto-cleared during end-of-day board clear'
+        }
+      });
+
       return { clearedCount: result.count, timestamp: now };
-    });
+    }, { timeout: 15000, maxWait: 5000 });
   },
 
   async updateKitchenStatus(id, kitchenStatus) {
@@ -360,7 +368,7 @@ export const orderRepository = {
       where: { id },
       data: { kitchenStatus },
       include: {
-        table: { select: { id: true, name: true } },
+        table: { select: { id: true, name: true, zone: { select: { id: true, name: true, type: true } } } },
         staff: { select: { id: true, username: true } },
         customer: { select: { id: true, name: true, phone: true } },
         items: { include: { menuItem: true, voidedByStaff: { select: { id: true, username: true } } } }
@@ -399,12 +407,12 @@ export const orderRepository = {
         where: { id },
         data: { status: 'CANCELLED' },
         include: {
-          table: { select: { id: true, name: true } },
+          table: { select: { id: true, name: true, zone: { select: { id: true, name: true, type: true } } } },
           staff: { select: { id: true, username: true } },
           items: { include: { menuItem: true, voidedByStaff: { select: { id: true, username: true } } } }
         }
       });
-    });
+    }, { timeout: 15000, maxWait: 5000 });
   },
 
   async createOrderWithTransaction({ tableId, orderType = 'DINE_IN', staffId, customerId, items }) {
@@ -460,12 +468,12 @@ export const orderRepository = {
           }
         },
         include: {
-          table: { select: { id: true, name: true } },
+          table: { select: { id: true, name: true, zone: { select: { id: true, name: true, type: true } } } },
           staff: { select: { id: true, username: true } },
           customer: { select: { id: true, name: true, phone: true } },
           items: { include: { menuItem: true } }
         }
       });
-    });
+    }, { timeout: 15000, maxWait: 5000 });
   }
 };

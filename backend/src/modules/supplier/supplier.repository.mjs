@@ -22,6 +22,18 @@ export const supplierRepository = {
     });
   },
 
+  async findWithAllOrders(id) {
+    return prisma.supplier.findUnique({
+      where: { id },
+      include: {
+        purchaseOrders: {
+          include: { payments: true },
+          orderBy: { createdAt: 'desc' }
+        }
+      }
+    });
+  },
+
   async create(data) {
     return prisma.supplier.create({
       data

@@ -1,17 +1,46 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, Clock, Utensils, Receipt, Ban } from 'lucide-react';
+import { ChevronDown, ChevronUp, Clock, Utensils, Receipt, Ban, Gamepad2 } from 'lucide-react';
 import { voidOrderItemApi } from '../../orders/api/orders.api';
 import styles from './TableWorkspaceModal.module.css';
 
-export function SubmittedOrdersList({ orders, unbilledFoodTotal, onRefreshOrders }) {
+function calculateSessionCharge(session) {
+  const startTime = session.startTime ? new Date(session.startTime) : new Date();
+  const endTime = session.endTime ? new Date(session.endTime) : (session.status === 'ACTIVE' ? new Date() : startTime);
+  let elapsedMins = Math.max(1, Math.ceil((endTime - startTime) / (1000 * 60)));
+  const graceMinutes = 5;
+  const remainderInto30 = elapsedMins % 30;
+  if (remainderInto30 > 0 && remainderInto30 <= graceMinutes) {
+    elapsedMins -= remainderInto30;
+  }
+  const fullHours = Math.floor(elapsedMins / 60);
+  const remainder = elapsedMins % 60;
+  const hourly = session.hourlyRateSnapshot || 0;
+  const halfHour = session.halfHourRateSnapshot || 0;
+  let charge = fullHours * hourly;
+  if (remainder > 0) {
+    charge += remainder <= 30 ? halfHour : hourly;
+  }
+  if (session.maxChargeCap && session.maxChargeCap > 0) {
+    charge = Math.min(charge, session.maxChargeCap);
+  }
+  return { elapsedMins, chargePaise: charge };
+}
+
+export function SubmittedOrdersList({ orders = [], gamingSessions = [], unbilledFoodTotal = 0, onRefreshOrders }) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [voidingItemId, setVoidingItemId] = useState(null);
   const [voidReasonInput, setVoidReasonInput] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Estimate GST (5% standard food tax) for live bill preview banner
-  const estTaxPaise = Math.round(unbilledFoodTotal * 0.05);
-  const estGrandTotalPaise = unbilledFoodTotal + estTaxPaise;
+  // Estimate total gaming charges
+  const unbilledGamingTotal = gamingSessions.reduce((sum, s) => {
+    const { chargePaise } = calculateSessionCharge(s);
+    return sum + chargePaise;
+  }, 0);
+
+  const combinedSubtotalPaise = unbilledFoodTotal + unbilledGamingTotal;
+  const estTaxPaise = Math.round(combinedSubtotalPaise * 0.05);
+  const estGrandTotalPaise = combinedSubtotalPaise + estTaxPaise;
 
   const handleVoidItemClick = (item) => {
     setVoidingItemId(item.id);
@@ -36,6 +65,8 @@ export function SubmittedOrdersList({ orders, unbilledFoodTotal, onRefreshOrders
     }
   };
 
+  const totalItemCount = orders.length + gamingSessions.length;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, overflow: 'hidden', backgroundColor: 'var(--color-surface)' }}>
       {/* 1. Header */}
@@ -43,12 +74,12 @@ export function SubmittedOrdersList({ orders, unbilledFoodTotal, onRefreshOrders
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <Utensils size={16} color="var(--color-brand)" />
           <span style={{ fontWeight: 700, fontSize: 'var(--text-xs)', color: 'var(--color-brand)' }}>
-            Unbilled Orders Submitted This Visit ({orders.length})
+            Unbilled History ({totalItemCount})
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontWeight: 800, fontSize: 'var(--text-xs)', color: 'var(--color-brand)' }}>
-            Subtotal: ₹{(unbilledFoodTotal / 100).toFixed(2)}
+            Subtotal: ₹{(combinedSubtotalPaise / 100).toFixed(2)}
           </span>
           {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </div>
@@ -56,14 +87,53 @@ export function SubmittedOrdersList({ orders, unbilledFoodTotal, onRefreshOrders
 
       {isExpanded && (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, padding: '8px 12px 12px 12px' }}>
-          {orders.length === 0 ? (
+          {orders.length === 0 && gamingSessions.length === 0 ? (
             <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', textAlign: 'center', padding: '24px 0', flex: 1 }}>
-              No orders submitted yet for this table visit.
+              No orders or gaming sessions submitted yet for this visit.
             </div>
           ) : (
             <>
-              {/* 2. Scrollable Individual Order Tickets Area */}
+              {/* 2. Scrollable History Tickets Area */}
               <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
+                
+                {/* Gaming Sessions Section Card */}
+                {gamingSessions.length > 0 && (
+                  <div style={{ backgroundColor: 'rgba(107, 63, 42, 0.05)', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-brand)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)', fontWeight: 800, color: 'var(--color-brand)', marginBottom: '6px', alignItems: 'center' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Gamepad2 size={14} /> Gaming Sessions ({gamingSessions.length})
+                      </span>
+                      <span>Total: ₹{(unbilledGamingTotal / 100).toFixed(2)}</span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {gamingSessions.map((session) => {
+                        const { elapsedMins, chargePaise } = calculateSessionCharge(session);
+                        const isLive = session.status === 'ACTIVE';
+
+                        return (
+                          <div key={session.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 'var(--text-xs)', backgroundColor: 'var(--color-surface)', padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--color-border)' }}>
+                            <div>
+                              <div style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                                {session.playerLabel || 'Player'}
+                                {isLive && <span style={{ color: 'var(--color-success)', fontSize: '10px', marginLeft: '6px', fontWeight: 800 }}>(ACTIVE • {elapsedMins}m)</span>}
+                                {!isLive && <span style={{ color: 'var(--color-text-secondary)', fontSize: '10px', marginLeft: '6px' }}>({elapsedMins}m closed)</span>}
+                              </div>
+                              <div style={{ fontSize: '10px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
+                                Rates: ₹{(session.halfHourRateSnapshot / 100).toFixed(0)}/30m • ₹{(session.hourlyRateSnapshot / 100).toFixed(0)}/hr
+                              </div>
+                            </div>
+                            <span style={{ fontWeight: 800, color: 'var(--color-brand)' }}>
+                              ₹{(chargePaise / 100).toFixed(2)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Food Orders Tickets */}
                 {orders.map((ord, idx) => {
                   const activeItems = ord.items.filter((i) => !i.voidedAt);
                   const orderSubtotalPaise = activeItems.reduce((sum, i) => sum + (i.priceSnapshot * i.quantity), 0);
@@ -73,7 +143,7 @@ export function SubmittedOrdersList({ orders, unbilledFoodTotal, onRefreshOrders
                   return (
                     <div key={ord.id} style={{ backgroundColor: 'var(--color-bg)', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-brand)', marginBottom: '6px' }}>
-                        <span>Batch Order #{orderNumber}</span>
+                        <span>Batch Food Order #{orderNumber}</span>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--color-text-secondary)', fontSize: '10px' }}>
                           <Clock size={10} /> {new Date(ord.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
@@ -171,7 +241,7 @@ export function SubmittedOrdersList({ orders, unbilledFoodTotal, onRefreshOrders
                 })}
               </div>
 
-              {/* 3. Pinned Cumulative Food Bill Preview Banner at Very Bottom */}
+              {/* 3. Pinned Cumulative Bill Preview Banner at Very Bottom */}
               <div style={{
                 backgroundColor: 'rgba(107, 63, 42, 0.08)',
                 padding: '12px',
@@ -183,15 +253,24 @@ export function SubmittedOrdersList({ orders, unbilledFoodTotal, onRefreshOrders
               }}>
                 <div style={{ fontSize: 'var(--text-xs)', fontWeight: 800, color: 'var(--color-brand)', marginBottom: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Receipt size={14} /> Cumulative Food Bill Preview
+                    <Receipt size={14} /> Cumulative Bill Preview
                   </span>
-                  <span>{orders.length} Batch Ticket(s)</span>
+                  <span>{orders.length} Batch(es) • {gamingSessions.length} Gaming</span>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--color-text-secondary)' }}>
-                  <span>Combined Food Subtotal:</span>
-                  <span>₹{(unbilledFoodTotal / 100).toFixed(2)}</span>
-                </div>
+                {unbilledFoodTotal > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+                    <span>Food Subtotal:</span>
+                    <span>₹{(unbilledFoodTotal / 100).toFixed(2)}</span>
+                  </div>
+                )}
+
+                {unbilledGamingTotal > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
+                    <span>Gaming Subtotal:</span>
+                    <span>₹{(unbilledGamingTotal / 100).toFixed(2)}</span>
+                  </div>
+                )}
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
                   <span>Est. GST (5%):</span>
@@ -199,7 +278,7 @@ export function SubmittedOrdersList({ orders, unbilledFoodTotal, onRefreshOrders
                 </div>
 
                 <div style={{ borderTop: '1px solid rgba(107, 63, 42, 0.3)', marginTop: '6px', paddingTop: '6px', display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)', fontWeight: 800, color: 'var(--color-brand)' }}>
-                  <span>Estimated Total Food Bill:</span>
+                  <span>Estimated Total Bill:</span>
                   <span style={{ fontSize: 'var(--text-sm)', fontWeight: 800 }}>₹{(estGrandTotalPaise / 100).toFixed(2)}</span>
                 </div>
               </div>

@@ -59,5 +59,35 @@ export const customerController = {
     } catch (err) {
       next(err);
     }
+  },
+
+  async getCustomerBalances(req, res, next) {
+    try {
+      const { sort } = req.query;
+      const balances = await customerService.getCustomerBalances({ sort });
+      return res.json({ data: balances });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async getCustomerLedger(req, res, next) {
+    try {
+      const ledger = await customerService.getCustomerLedger(req.params.id);
+      return res.json({ data: ledger });
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async exportCustomerLedgerCsv(req, res, next) {
+    try {
+      const csv = await customerService.exportCustomerLedgerCsv(req.params.id);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="customer-ledger-${req.params.id}.csv"`);
+      return res.status(200).send(csv);
+    } catch (err) {
+      next(err);
+    }
   }
 };

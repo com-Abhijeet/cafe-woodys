@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import { useBilling } from '../hooks/useBilling';
 import { useCustomers } from '../../customers/hooks/useCustomers';
 import { printReceipt } from '../../../lib/print/PrintService';
+import { useBackHandler } from '../../../lib/native/backHandler';
 import { Input } from '../../../components/ui/Input/Input';
 import { Button } from '../../../components/ui/Button/Button';
 import { X, CheckCircle2, Receipt, Printer, User, UserCheck, Plus, Search } from 'lucide-react';
 import styles from './CheckoutModal.module.css';
 
 export function CheckoutModal({ bill: initialBill, table, onClose, onRefreshTable }) {
+  useBackHandler(onClose);
   const { currentBill, submitPayment, attachCustomerToBill, loadBill } = useBilling();
   const activeBill = currentBill || initialBill;
 

@@ -1,4 +1,5 @@
 import { gamingSettingsRepository } from './gaming-settings.repository.mjs';
+import { broadcastSettingsUpdated } from '../../realtime/broadcast.mjs';
 
 export const gamingSettingsService = {
   async getSettings() {
@@ -6,6 +7,8 @@ export const gamingSettingsService = {
   },
 
   async updateSettings(data) {
-    return gamingSettingsRepository.updateSettings(data);
+    const updated = await gamingSettingsRepository.updateSettings(data);
+    broadcastSettingsUpdated('GAMING', updated);
+    return updated;
   }
 };

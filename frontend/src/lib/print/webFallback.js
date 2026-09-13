@@ -17,11 +17,39 @@ export function webFallback(formattedText) {
           <head>
             <title>Receipt Print Preview - Cafe Woody's</title>
             <style>
-              body { font-family: monospace; font-size: 12px; white-space: pre-wrap; padding: 20px; background: #fff; color: #000; }
-              @media print { body { padding: 0; } }
+              * { box-sizing: border-box; }
+              @page { margin: 0mm; size: 72mm auto; }
+              body {
+                font-family: 'Courier New', Courier, monospace;
+                font-size: 11px;
+                font-weight: 900 !important;
+                color: #000000 !important;
+                white-space: pre-wrap;
+                padding: 1mm 2mm;
+                margin: 0;
+                max-width: 72mm;
+                background: #ffffff;
+                -webkit-font-smoothing: none !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                letter-spacing: -0.1px;
+              }
+              pre {
+                font-family: 'Courier New', Courier, monospace;
+                font-size: 11px;
+                font-weight: 900 !important;
+                color: #000000 !important;
+                margin: 0;
+                line-height: 1.2;
+              }
+              @media print {
+                @page { margin: 0mm; size: 72mm auto; }
+                body { padding: 1mm; margin: 0; max-width: 72mm; color: #000000 !important; font-weight: 900 !important; }
+                pre { color: #000000 !important; font-weight: 900 !important; }
+              }
             </style>
           </head>
-          <body><pre style="font-family: monospace; font-size: 12px; margin:0;">${htmlBody}</pre></body>
+          <body><pre>${htmlBody}</pre></body>
         </html>
       `);
       printWindow.document.close();

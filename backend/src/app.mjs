@@ -26,6 +26,7 @@ import loyaltySettingsRoutes from './modules/loyalty-settings/loyalty-settings.r
 import loyaltyRedemptionRulesRoutes from './modules/loyalty-redemption-rules/loyalty-redemption-rules.routes.mjs';
 import exportRoutes from './modules/export/export.routes.mjs';
 import reportsRoutes from './modules/reports/reports.routes.mjs';
+import daybookRoutes from './modules/daybook/daybook.routes.mjs';
 import { errorHandler } from './shared/middleware/error-handler.mjs';
 
 const app = express();
@@ -48,6 +49,7 @@ app.use('/api/inventory-items', inventoryRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api', exportRoutes); // Mounted before billingRoutes so /bills/export takes precedence over /bills/:id
+app.use('/api', daybookRoutes);
 app.use('/api', purchaseRoutes);
 app.use('/api', orderRoutes);
 app.use('/api', paymentRoutes);

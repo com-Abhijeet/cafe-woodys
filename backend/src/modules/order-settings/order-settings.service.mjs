@@ -1,4 +1,5 @@
 import { orderSettingsRepository } from './order-settings.repository.mjs';
+import { broadcastSettingsUpdated } from '../../realtime/broadcast.mjs';
 
 export const orderSettingsService = {
   async getSettings() {
@@ -6,6 +7,8 @@ export const orderSettingsService = {
   },
 
   async updateSettings(data) {
-    return orderSettingsRepository.updateSettings(data);
+    const updated = await orderSettingsRepository.updateSettings(data);
+    broadcastSettingsUpdated('ORDER', updated);
+    return updated;
   }
 };

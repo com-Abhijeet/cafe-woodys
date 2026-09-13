@@ -1,36 +1,35 @@
 import { useState, useEffect } from 'react';
+import { useSettingsContext } from '../../../context/SettingsContext';
 import { apiClient } from '../../../lib/apiClient';
 import { Button } from '../../../components/ui/Button/Button';
 import { Input } from '../../../components/ui/Input/Input';
 import { Gamepad2, CheckCircle2 } from 'lucide-react';
 
 export function GamingSettingsForm() {
+  const { settings, isLoading, updateSettingModule } = useSettingsContext();
+  const gamingData = settings?.gamingSettings;
+
   const [gamingGracePeriodMinutes, setGamingGracePeriodMinutes] = useState('5');
-  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
   useEffect(() => {
-    apiClient('/gaming-settings')
-      .then((data) => {
-        if (data) {
-          setGamingGracePeriodMinutes(String(data.gamingGracePeriodMinutes ?? 5));
-        }
-      })
-      .catch((err) => console.error('Failed to fetch gaming settings:', err))
-      .finally(() => setIsLoading(false));
-  }, []);
+    if (gamingData) {
+      setGamingGracePeriodMinutes(String(gamingData.gamingGracePeriodMinutes ?? 5));
+    }
+  }, [gamingData]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSaving(true);
     try {
-      await apiClient('/gaming-settings', {
+      const updated = await apiClient('/gaming-settings', {
         method: 'PUT',
         body: {
           gamingGracePeriodMinutes: Number(gamingGracePeriodMinutes)
         }
       });
+      updateSettingModule('gamingSettings', updated || { gamingGracePeriodMinutes: Number(gamingGracePeriodMinutes) });
       setToastMessage('Gaming rules saved successfully!');
       setTimeout(() => setToastMessage(''), 3000);
     } catch (err) {
@@ -40,7 +39,7 @@ export function GamingSettingsForm() {
     }
   };
 
-  if (isLoading) return <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>Loading gaming settings...</p>;
+  if (isLoading && !gamingData) return <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>Loading gaming settings...</p>;
 
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', maxWidth: '640px' }}>

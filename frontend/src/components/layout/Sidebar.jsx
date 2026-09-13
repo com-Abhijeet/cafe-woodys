@@ -8,11 +8,13 @@ import {
   Package,
   Truck,
   UserCheck,
+  Wallet,
   CreditCard,
   ReceiptText,
   Receipt,
   BarChart3,
   Settings,
+  Printer,
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
@@ -127,6 +129,17 @@ export function Sidebar({ activeTab, onSelectTab, role = 'ADMIN', isCollapsed, o
           />
         )}
 
+        {/* 6b. Daybook */}
+        {isVisible('DAYBOOK') && (
+          <SidebarItem
+            icon={Wallet}
+            label="Daybook & Cash"
+            isActive={activeTab === 'DAYBOOK'}
+            onClick={() => onSelectTab('DAYBOOK')}
+            isCollapsed={isCollapsed}
+          />
+        )}
+
         {/* 7. Payments Reconciliation */}
         {isVisible('PAYMENTS') && (
           <SidebarItem
@@ -167,6 +180,17 @@ export function Sidebar({ activeTab, onSelectTab, role = 'ADMIN', isCollapsed, o
             label="Settings & Staff"
             isActive={activeTab === 'SETTINGS'}
             onClick={() => onSelectTab('SETTINGS')}
+            isCollapsed={isCollapsed}
+          />
+        )}
+
+        {/* 11. Print & System Execution Logs */}
+        {isVisible('PRINT_LOGS') && (
+          <SidebarItem
+            icon={Printer}
+            label="Print & KOT Logs"
+            isActive={activeTab === 'PRINT_LOGS'}
+            onClick={() => onSelectTab('PRINT_LOGS')}
             isCollapsed={isCollapsed}
           />
         )}

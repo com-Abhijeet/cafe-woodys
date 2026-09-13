@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button } from '../../../components/ui/Button/Button';
 import { Input } from '../../../components/ui/Input/Input';
+import { useBackHandler } from '../../../lib/native/backHandler';
 import { X, DollarSign, QrCode, CreditCard, Receipt } from 'lucide-react';
 
 export function PaymentModal({
@@ -11,6 +12,7 @@ export function PaymentModal({
   onSubmitPayment,
   isSubmitting = false
 }) {
+  useBackHandler(onClose, isOpen);
   const [method, setMethod] = useState(defaultMethod);
   const [amountRs, setAmountRs] = useState(remainingRs || '0.00');
   const [reference, setReference] = useState('');
