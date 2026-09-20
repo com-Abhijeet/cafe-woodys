@@ -227,10 +227,9 @@ export const gamingSessionService = {
     const startTime = new Date(now.getTime() - duration * 60 * 1000);
     const endTime = now;
 
-    const createdSessions = [];
-
+    const sessionsToCreate = [];
     for (let i = 1; i <= count; i++) {
-      const session = await gamingSessionRepository.create({
+      sessionsToCreate.push({
         tableId,
         playerLabel: `Quick Add P${i}`,
         halfHourRateSnapshot,
@@ -241,8 +240,11 @@ export const gamingSessionService = {
         startTime,
         endTime
       });
-      createdSessions.push(session);
     }
+
+    const createdSessions = await Promise.all(
+      sessionsToCreate.map((sessionData) => gamingSessionRepository.create(sessionData))
+    );
 
     if (table.status === 'FREE') {
       await tableRepository.update(tableId, { status: 'OCCUPIED' });

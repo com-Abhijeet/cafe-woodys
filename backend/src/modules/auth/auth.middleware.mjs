@@ -1,8 +1,11 @@
 import jwt from 'jsonwebtoken';
 import { config } from '../../config/env.mjs';
 import prisma from '../../shared/db/client.mjs';
+import { settingsCache } from '../../shared/utils/settings-cache.mjs';
 import { UnauthorizedError } from '../../shared/errors/unauthorized-error.mjs';
 import { ForbiddenError } from '../../shared/errors/forbidden-error.mjs';
+
+const STAFF_CACHE_PREFIX = 'STAFF_USER_';
 
 export async function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -13,10 +16,18 @@ export async function requireAuth(req, res, next) {
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, config.jwtSecret);
-    const staff = await prisma.staff.findUnique({
-      where: { id: decoded.id },
-      select: { id: true, username: true, role: true, isActive: true }
-    });
+    const cacheKey = `${STAFF_CACHE_PREFIX}${decoded.id}`;
+
+    let staff = settingsCache.get(cacheKey);
+    if (!staff) {
+      staff = await prisma.staff.findUnique({
+        where: { id: decoded.id },
+        select: { id: true, username: true, role: true, isActive: true }
+      });
+      if (staff && staff.isActive) {
+        settingsCache.set(cacheKey, staff, 5 * 60 * 1000); // Cache staff user for 5 minutes
+      }
+    }
 
     if (!staff || !staff.isActive) {
       return next(new UnauthorizedError('Session invalid or account no longer exists. Please sign in again.', 'SESSION_INVALID'));

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Gamepad2, Users, Coins, X, AlertCircle, Plus, Minus } from 'lucide-react';
 import styles from './QuickAddGamingModal.module.css';
 import DurationSelector from '../../../components/ui/DurationSelector';
 import { apiClient } from '../../../lib/apiClient';
@@ -61,30 +62,47 @@ export default function QuickAddGamingModal({ isOpen, onClose, table, onSuccess 
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <div className={styles.header}>
-          <h3>+ Quick Add Gaming Charge ({table.name})</h3>
-          <button className={styles.closeBtn} onClick={onClose}>&times;</button>
+          <div className={styles.headerTitleGroup}>
+            <div className={styles.iconBadge}>
+              <Gamepad2 size={20} color="var(--color-gaming-zone)" />
+            </div>
+            <div>
+              <h3>Quick Add Gaming Charge</h3>
+              <span className={styles.tableBadge}>{table.name}</span>
+            </div>
+          </div>
+          <button className={styles.closeBtn} onClick={onClose}><X size={18} /></button>
         </div>
 
         <form onSubmit={handleSubmit} className={styles.form}>
-          {error && <div className={styles.errorAlert}>{error}</div>}
+          {error && (
+            <div className={styles.errorAlert}>
+              <AlertCircle size={16} />
+              <span>{error}</span>
+            </div>
+          )}
 
           <div className={styles.fieldGroup}>
-            <label>Number of Players</label>
+            <label className={styles.labelWithIcon}>
+              <Users size={14} color="var(--color-gaming-zone)" /> Number of Players
+            </label>
             <div className={styles.counterRow}>
               <button
                 type="button"
                 className={styles.counterBtn}
                 onClick={() => setPlayerCount((c) => Math.max(1, c - 1))}
+                title="Decrease players"
               >
-                -
+                <Minus size={16} />
               </button>
               <span className={styles.counterVal}>{playerCount}</span>
               <button
                 type="button"
                 className={styles.counterBtn}
                 onClick={() => setPlayerCount((c) => c + 1)}
+                title="Increase players"
               >
-                +
+                <Plus size={16} />
               </button>
             </div>
           </div>
@@ -95,14 +113,19 @@ export default function QuickAddGamingModal({ isOpen, onClose, table, onSuccess 
           />
 
           <div className={styles.fieldGroup}>
-            <label>Flat Charge Override (₹) <span className={styles.optional}>(Optional)</span></label>
-            <input
-              type="number"
-              step="0.01"
-              placeholder="Leave empty to use zone slab rates"
-              value={flatOverrideRs}
-              onChange={(e) => setFlatOverrideRs(e.target.value)}
-            />
+            <label className={styles.labelWithIcon}>
+              <Coins size={14} color="var(--color-gaming-zone)" /> Flat Charge Override (₹) <span className={styles.optional}>(Optional)</span>
+            </label>
+            <div className={styles.currencyInputWrapper}>
+              <span className={styles.currencyPrefix}>₹</span>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="Leave empty to use zone slab rates"
+                value={flatOverrideRs}
+                onChange={(e) => setFlatOverrideRs(e.target.value)}
+              />
+            </div>
           </div>
 
           <div className={styles.actions}>

@@ -33,6 +33,12 @@ export const gamingSessionRepository = {
     });
   },
 
+  async createMany(dataArray) {
+    return prisma.gamingSession.createMany({
+      data: dataArray
+    });
+  },
+
   async closeSession(id, endTime) {
     return prisma.gamingSession.update({
       where: { id },

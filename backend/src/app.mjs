@@ -34,6 +34,16 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// HTTP Request Duration & Method Logger
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`⏱️ [${new Date().toLocaleTimeString()}] ${req.method} ${req.originalUrl} -> ${res.statusCode} (${duration}ms)`);
+  });
+  next();
+});
+
 // Healthcheck
 app.get('/api/health', (req, res) => {
   res.json({ data: { status: 'ok', timestamp: new Date().toISOString() } });

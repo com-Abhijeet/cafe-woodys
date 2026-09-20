@@ -147,49 +147,92 @@ export function PlayerSessionsPanel({ table, onRefreshTable }) {
       {closingSession && (
         <div style={{
           position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          inset: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          backdropFilter: 'blur(8px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 1100
+          zIndex: 1100,
+          padding: 'var(--space-4)'
         }}>
           <div style={{
             backgroundColor: 'var(--color-surface)',
             border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-lg)',
-            padding: 'var(--space-4)',
-            maxWidth: '400px',
-            width: '90%',
-            boxShadow: 'var(--shadow-lg)'
+            borderRadius: 'var(--radius-xl)',
+            padding: 'var(--space-5)',
+            maxWidth: '420px',
+            width: '100%',
+            boxShadow: 'var(--shadow-xl)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--space-4)'
           }}>
-            <h3 style={{ margin: 0, fontSize: 'var(--text-base)', color: 'var(--color-brand)' }}>
-              End Session for {closingSession.playerLabel}
-            </h3>
-            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
-              Select session stop time. Default is now, or back-date up to 60 minutes if checkout was delayed.
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: 'var(--radius-md)',
+                  backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '1px solid rgba(59, 130, 246, 0.3)'
+                }}>
+                  <Gamepad2 size={20} color="var(--color-gaming-zone)" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 'var(--text-base)', color: 'var(--color-text-primary)', fontWeight: 800 }}>
+                    End Session
+                  </h3>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-gaming-zone)' }}>
+                    {closingSession.playerLabel}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setClosingSession(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--color-text-secondary)',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  borderRadius: 'var(--radius-sm)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', margin: 0, lineHeight: 1.4 }}>
+              Select session stop time. Default is <strong>Now</strong>, or back-date up to 60 minutes if checkout was delayed.
             </p>
 
-            <div style={{ margin: '16px 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <label style={{ fontSize: 'var(--text-xs)', fontWeight: 700 }}>Adjust Stop Time:</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <label style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Clock size={14} color="var(--color-gaming-zone)" /> Adjust Stop Time:
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
                 {[0, 5, 10, 15].map((m) => (
                   <button
                     key={m}
                     type="button"
                     onClick={() => setBackdateMinutes(m)}
                     style={{
-                      padding: '6px',
-                      borderRadius: '6px',
+                      padding: '8px',
+                      borderRadius: 'var(--radius-md)',
                       fontSize: 'var(--text-xs)',
-                      fontWeight: 700,
-                      border: '1px solid var(--color-border)',
-                      backgroundColor: backdateMinutes === m ? 'var(--color-brand)' : 'var(--color-bg)',
-                      color: backdateMinutes === m ? '#ffffff' : 'var(--color-text-primary)',
-                      cursor: 'pointer'
+                      fontWeight: 800,
+                      border: backdateMinutes === m ? '1px solid var(--color-gaming-zone)' : '1px solid var(--color-border)',
+                      backgroundColor: backdateMinutes === m ? 'rgba(59, 130, 246, 0.15)' : 'var(--color-bg)',
+                      color: backdateMinutes === m ? 'var(--color-gaming-zone)' : 'var(--color-text-primary)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
                     }}
                   >
                     {m === 0 ? 'Now' : `-${m}m`}
@@ -197,20 +240,30 @@ export function PlayerSessionsPanel({ table, onRefreshTable }) {
                 ))}
               </div>
 
-              <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>Custom back-date (mins):</span>
+              <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'var(--color-bg)', padding: '8px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', fontWeight: 600 }}>Custom back-date (mins):</span>
                 <input
                   type="number"
                   min="0"
                   max="60"
                   value={backdateMinutes}
                   onChange={(e) => setBackdateMinutes(Math.min(60, Math.max(0, parseInt(e.target.value, 10) || 0)))}
-                  style={{ width: '70px', padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--color-border)', fontSize: 'var(--text-xs)' }}
+                  style={{
+                    width: '70px',
+                    padding: '6px 10px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--color-border)',
+                    backgroundColor: 'var(--color-surface)',
+                    color: 'var(--color-text-primary)',
+                    fontSize: 'var(--text-xs)',
+                    fontWeight: 700,
+                    outline: 'none'
+                  }}
                 />
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-3)', marginTop: 'var(--space-2)' }}>
               <Button variant="secondary" onClick={() => setClosingSession(null)}>Cancel</Button>
               <Button onClick={handleConfirmCloseSession} disabled={isSubmitting}>
                 {isSubmitting ? 'Closing...' : 'Confirm & End Session'}

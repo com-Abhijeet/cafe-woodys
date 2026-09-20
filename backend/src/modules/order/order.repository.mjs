@@ -1,4 +1,5 @@
 import prisma from '../../shared/db/client.mjs';
+import { menuItemService } from '../menu-item/menu-item.service.mjs';
 import { ConflictError } from '../../shared/errors/conflict-error.mjs';
 import { NotFoundError } from '../../shared/errors/not-found-error.mjs';
 
@@ -15,33 +16,56 @@ export const orderRepository = {
     const where = { tableId };
     if (status) where.status = status;
 
-    return prisma.order.findMany({
+    const orders = await prisma.order.findMany({
       where,
       include: {
-        staff: {
-          select: { id: true, username: true }
-        },
-        customer: true,
-        items: {
-          include: { menuItem: true, voidedByStaff: { select: { id: true, username: true } } }
-        }
+        staff: { select: { id: true, username: true } },
+        customer: { select: { id: true, name: true, phone: true } },
+        items: true
       },
       orderBy: { createdAt: 'desc' }
     });
+
+    if (orders.length === 0) return orders;
+
+    // Attach cached menu items in 0ms memory lookup
+    const allMenuItemIds = [...new Set(orders.flatMap((o) => o.items.map((i) => i.menuItemId)))];
+    const menuItems = await menuItemService.getMenuItemsByIds(allMenuItemIds);
+    const menuMap = new Map(menuItems.map((m) => [m.id, m]));
+
+    return orders.map((o) => ({
+      ...o,
+      items: o.items.map((i) => ({
+        ...i,
+        menuItem: menuMap.get(i.menuItemId) || null
+      }))
+    }));
   },
 
   async findById(id) {
-    return prisma.order.findUnique({
+    const order = await prisma.order.findUnique({
       where: { id },
       include: {
         table: { select: { id: true, name: true, zoneId: true } },
         staff: { select: { id: true, username: true } },
         customer: { select: { id: true, name: true, phone: true } },
-        items: {
-          include: { menuItem: true, voidedByStaff: { select: { id: true, username: true } } }
-        }
+        items: true
       }
     });
+
+    if (!order) return null;
+
+    const menuItemIds = [...new Set(order.items.map((i) => i.menuItemId))];
+    const menuItems = await menuItemService.getMenuItemsByIds(menuItemIds);
+    const menuMap = new Map(menuItems.map((m) => [m.id, m]));
+
+    return {
+      ...order,
+      items: order.items.map((i) => ({
+        ...i,
+        menuItem: menuMap.get(i.menuItemId) || null
+      }))
+    };
   },
 
   async findOrderItemById(orderItemId) {
@@ -416,40 +440,60 @@ export const orderRepository = {
   },
 
   async createOrderWithTransaction({ tableId, orderType = 'DINE_IN', staffId, customerId, items }) {
-    return prisma.$transaction(async (tx) => {
+    const createdOrderId = await prisma.$transaction(async (tx) => {
       // 1. Generate sequential daily order number for current business day (resets on Close Day)
       const dailyOrderNumber = await getNextDailyOrderNumber(tx);
 
-      // 2. Auto-deduct raw material inventory for recipe-linked menu items
-      for (const item of items) {
-        const ingredients = await tx.recipeIngredient.findMany({
-          where: { menuItemId: item.menuItemId },
-          include: { inventoryItem: true, menuItem: true }
-        });
+      // 2. Auto-deduct raw material inventory for recipe-linked menu items (Batched to eliminate N+1 latency)
+      const menuItemIds = items.map((i) => i.menuItemId);
+      const itemQtyMap = new Map(items.map((i) => [i.menuItemId, i.quantity]));
 
-        for (const ing of ingredients) {
-          const needed = Number(ing.quantity) * item.quantity;
+      const allIngredients = await tx.recipeIngredient.findMany({
+        where: { menuItemId: { in: menuItemIds } },
+        include: { inventoryItem: true, menuItem: true }
+      });
+
+      if (allIngredients.length > 0) {
+        // Group required inventory deductions by inventoryItemId
+        const requiredDeductions = new Map();
+
+        for (const ing of allIngredients) {
+          const orderItemQty = itemQtyMap.get(ing.menuItemId) || 1;
+          const needed = Number(ing.quantity) * orderItemQty;
+
+          if (!requiredDeductions.has(ing.inventoryItemId)) {
+            requiredDeductions.set(ing.inventoryItemId, {
+              inventoryItem: ing.inventoryItem,
+              menuItemName: ing.menuItem?.name || 'Item',
+              needed: 0
+            });
+          }
+          requiredDeductions.get(ing.inventoryItemId).needed += needed;
+        }
+
+        // Execute inventory stock updates sequentially inside single transaction connection
+        for (const deduction of requiredDeductions.values()) {
           const result = await tx.inventoryItem.updateMany({
             where: {
-              id: ing.inventoryItemId,
-              stockQuantity: { gte: needed }
+              id: deduction.inventoryItem.id,
+              stockQuantity: { gte: deduction.needed }
             },
             data: {
-              stockQuantity: { decrement: needed }
+              stockQuantity: { decrement: deduction.needed }
             }
           });
 
           if (result.count === 0) {
             throw new ConflictError(
-              `Insufficient stock for ingredient '${ing.inventoryItem.name}' to prepare '${ing.menuItem?.name || 'Item'}'. (Needed: ${needed} ${ing.inventoryItem.unit})`,
+              `Insufficient stock for ingredient '${deduction.inventoryItem.name}' to prepare '${deduction.menuItemName}'. (Needed: ${deduction.needed} ${deduction.inventoryItem.unit})`,
               'INSUFFICIENT_RECIPE_STOCK'
             );
           }
         }
       }
 
-      // 3. Create Order & OrderItem rows
-      return tx.order.create({
+      // 3. Create Order row
+      const newOrder = await tx.order.create({
         data: {
           tableId: orderType === 'PARCEL' ? null : tableId,
           orderType,
@@ -457,23 +501,27 @@ export const orderRepository = {
           staffId,
           customerId: customerId || null,
           status: 'OPEN',
-          kitchenStatus: 'PENDING',
-          items: {
-            create: items.map((item) => ({
-              menuItemId: item.menuItemId,
-              quantity: item.quantity,
-              priceSnapshot: item.priceSnapshot,
-              gstPercentSnapshot: item.gstPercentSnapshot
-            }))
-          }
-        },
-        include: {
-          table: { select: { id: true, name: true, zone: { select: { id: true, name: true, type: true } } } },
-          staff: { select: { id: true, username: true } },
-          customer: { select: { id: true, name: true, phone: true } },
-          items: { include: { menuItem: true } }
+          kitchenStatus: 'PENDING'
         }
       });
+
+      // 4. Batch insert OrderItems in ONE single SQL query
+      if (items && items.length > 0) {
+        await tx.orderItem.createMany({
+          data: items.map((item) => ({
+            orderId: newOrder.id,
+            menuItemId: item.menuItemId,
+            quantity: item.quantity,
+            priceSnapshot: item.priceSnapshot,
+            gstPercentSnapshot: item.gstPercentSnapshot
+          }))
+        });
+      }
+
+      return newOrder.id;
     }, { timeout: 15000, maxWait: 5000 });
+
+    // Fetch full order with includes outside transaction context to prevent pg connection lock contention
+    return this.findById(createdOrderId);
   }
 };

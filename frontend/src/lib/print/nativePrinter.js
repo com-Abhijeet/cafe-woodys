@@ -192,12 +192,12 @@ export async function printNative(formattedText, printerConfig = {}) {
         text: preparedText,
       };
     } else {
-      const targetId = printerConfig.id || "billing-printer";
+      const targetId = `tcp-${ip}:${printerConfig.port || 9100}`;
       payload = {
         type: "tcp",
         id: targetId,
         address: ip,
-        port: 9100,
+        port: printerConfig.port || 9100,
         printerWidthMM: paperWidth,
         printerNbrCharactersPerLine: charsPerLine,
         mmFeedPaper: 25,

@@ -1,5 +1,5 @@
 import { orderRepository } from './order.repository.mjs';
-import { menuItemRepository } from '../menu-item/menu-item.repository.mjs';
+import { menuItemService } from '../menu-item/menu-item.service.mjs';
 import { tableService } from '../table/table.service.mjs';
 import { tableRepository } from '../table/table.repository.mjs';
 import { businessProfileService } from '../business-profile/business-profile.service.mjs';
@@ -206,21 +206,21 @@ export const orderService = {
   },
 
   async createOrder(staffId, { tableId, orderType = 'DINE_IN', items, customerId }) {
-    if (orderType === 'DINE_IN') {
-      if (!tableId) {
-        throw new ValidationError('tableId is required for DINE_IN orders', 'TABLE_REQUIRED');
-      }
-      const table = await tableService.getTableById(tableId);
-      if (!table) {
-        throw new NotFoundError('Table not found', 'TABLE_NOT_FOUND');
-      }
+    if (orderType === 'DINE_IN' && !tableId) {
+      throw new ValidationError('tableId is required for DINE_IN orders', 'TABLE_REQUIRED');
+    }
+
+    const menuItemIds = items.map((i) => i.menuItemId);
+
+    const table = orderType === 'DINE_IN' && tableId ? await tableService.getTableById(tableId) : null;
+    if (orderType === 'DINE_IN' && !table) {
+      throw new NotFoundError('Table not found', 'TABLE_NOT_FOUND');
     }
 
     const taxSettings = await taxSettingsService.getSettings();
-    const defaultGst = taxSettings ? Number(taxSettings.defaultGstPercent) : 5;
+    const dbMenuItems = await menuItemService.getMenuItemsByIds(menuItemIds);
 
-    const menuItemIds = items.map((i) => i.menuItemId);
-    const dbMenuItems = await menuItemRepository.findByIds(menuItemIds);
+    const defaultGst = taxSettings ? Number(taxSettings.defaultGstPercent) : 5;
     const dbMenuMap = new Map(dbMenuItems.map((m) => [m.id, m]));
 
     const preparedItems = [];
@@ -251,13 +251,9 @@ export const orderService = {
       items: preparedItems
     });
 
-    if (orderType === 'DINE_IN' && tableId) {
-      const table = await tableService.getTableById(tableId);
-      if (table && table.status === 'FREE') {
-        await tableRepository.update(tableId, { status: 'OCCUPIED' });
-        const updatedTable = await tableService.getTableById(tableId);
-        broadcastTableUpdate(updatedTable);
-      }
+    if (orderType === 'DINE_IN' && tableId && table && table.status === 'FREE') {
+      const updatedTable = await tableRepository.update(tableId, { status: 'OCCUPIED' });
+      broadcastTableUpdate({ ...table, ...updatedTable });
     }
 
     broadcastOrderCreated(createdOrder);

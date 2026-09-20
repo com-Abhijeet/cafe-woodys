@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Wallet, ArrowDownRight, ArrowUpRight, X, AlertCircle } from 'lucide-react';
 import styles from './CashMovementModal.module.css';
 
 export default function CashMovementModal({ isOpen, onClose, onSubmit }) {
@@ -42,12 +43,22 @@ export default function CashMovementModal({ isOpen, onClose, onSubmit }) {
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <div className={styles.header}>
-          <h3>Add Cash Movement</h3>
-          <button className={styles.closeBtn} onClick={onClose}>&times;</button>
+          <div className={styles.headerTitleGroup}>
+            <div className={styles.iconBadge}>
+              <Wallet size={20} color="var(--color-brand)" />
+            </div>
+            <h3>Record Cash Movement</h3>
+          </div>
+          <button className={styles.closeBtn} onClick={onClose}><X size={18} /></button>
         </div>
 
         <form onSubmit={handleSubmit} className={styles.form}>
-          {error && <div className={styles.errorAlert}>{error}</div>}
+          {error && (
+            <div className={styles.errorAlert}>
+              <AlertCircle size={16} />
+              <span>{error}</span>
+            </div>
+          )}
 
           <div className={styles.typeSelector}>
             <button
@@ -55,36 +66,39 @@ export default function CashMovementModal({ isOpen, onClose, onSubmit }) {
               className={`${styles.typeBtn} ${styles.inBtn} ${type === 'CASH_IN' ? styles.activeIn : ''}`}
               onClick={() => setType('CASH_IN')}
             >
-              + Cash In (Receipt / Float)
+              <ArrowDownRight size={16} /> + Cash In (Receipt / Float)
             </button>
             <button
               type="button"
               className={`${styles.typeBtn} ${styles.outBtn} ${type === 'CASH_OUT' ? styles.activeOut : ''}`}
               onClick={() => setType('CASH_OUT')}
             >
-              - Cash Out (Expense / Draw)
+              <ArrowUpRight size={16} /> - Cash Out (Expense / Draw)
             </button>
           </div>
 
           <div className={styles.fieldGroup}>
             <label>Amount (₹)</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0.01"
-              placeholder="e.g. 500"
-              value={amountRs}
-              onChange={(e) => setAmountRs(e.target.value)}
-              required
-              autoFocus
-            />
+            <div className={styles.currencyInputWrapper}>
+              <span className={styles.currencyPrefix}>₹</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                placeholder="e.g. 500.00"
+                value={amountRs}
+                onChange={(e) => setAmountRs(e.target.value)}
+                required
+                autoFocus
+              />
+            </div>
           </div>
 
           <div className={styles.fieldGroup}>
             <label>Reason / Explanation</label>
             <textarea
               rows="3"
-              placeholder="e.g. Owner float top-up, Petty cash tea/snacks, Milk purchase"
+              placeholder="e.g. Owner float top-up, Petty cash tea/snacks, Supplier payment"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               required

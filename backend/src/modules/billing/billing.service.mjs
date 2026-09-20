@@ -1,21 +1,24 @@
-import prisma from '../../shared/db/client.mjs';
-import { billingRepository } from './billing.repository.mjs';
-import { tableService, canTableBeFreed } from '../table/table.service.mjs';
-import { discountRuleRepository } from '../discount-rule/discount-rule.repository.mjs';
-import { calculateSlotCharge } from '../gaming-session/gaming-session.service.mjs';
-import { businessProfileService } from '../business-profile/business-profile.service.mjs';
-import { taxSettingsService } from '../tax-settings/tax-settings.service.mjs';
-import { paymentSettingsService } from '../payment-settings/payment-settings.service.mjs';
-import { gamingSettingsService } from '../gaming-settings/gaming-settings.service.mjs';
-import { smsService } from '../sms/sms.service.mjs';
-import { loyaltySettingsRepository } from '../loyalty-settings/loyalty-settings.repository.mjs';
-import { loyaltyTransactionRepository } from '../customer/loyalty-transaction.repository.mjs';
-import { loyaltyTransactionService } from '../customer/loyalty-transaction.service.mjs';
-import { broadcastBillCreated, broadcastTableUpdate } from '../../realtime/broadcast.mjs';
-import { NotFoundError } from '../../shared/errors/not-found-error.mjs';
-import { ValidationError } from '../../shared/errors/validation-error.mjs';
-import { ConflictError } from '../../shared/errors/conflict-error.mjs';
-import { ForbiddenError } from '../../shared/errors/forbidden-error.mjs';
+import prisma from "../../shared/db/client.mjs";
+import { billingRepository } from "./billing.repository.mjs";
+import { tableService, canTableBeFreed } from "../table/table.service.mjs";
+import { discountRuleRepository } from "../discount-rule/discount-rule.repository.mjs";
+import { calculateSlotCharge } from "../gaming-session/gaming-session.service.mjs";
+import { businessProfileService } from "../business-profile/business-profile.service.mjs";
+import { taxSettingsService } from "../tax-settings/tax-settings.service.mjs";
+import { paymentSettingsService } from "../payment-settings/payment-settings.service.mjs";
+import { gamingSettingsService } from "../gaming-settings/gaming-settings.service.mjs";
+import { smsService } from "../sms/sms.service.mjs";
+import { loyaltySettingsRepository } from "../loyalty-settings/loyalty-settings.repository.mjs";
+import { loyaltyTransactionRepository } from "../customer/loyalty-transaction.repository.mjs";
+import { loyaltyTransactionService } from "../customer/loyalty-transaction.service.mjs";
+import {
+  broadcastBillCreated,
+  broadcastTableUpdate,
+} from "../../realtime/broadcast.mjs";
+import { NotFoundError } from "../../shared/errors/not-found-error.mjs";
+import { ValidationError } from "../../shared/errors/validation-error.mjs";
+import { ConflictError } from "../../shared/errors/conflict-error.mjs";
+import { ForbiddenError } from "../../shared/errors/forbidden-error.mjs";
 
 export function getFinancialYear(date = new Date()) {
   const year = date.getFullYear();
@@ -44,7 +47,7 @@ export function calculateLineAmounts(amount, gstPercent, pricesIncludeTax) {
       totalTax: roundedTax,
       cgst,
       sgst,
-      lineTotal: amount
+      lineTotal: amount,
     };
   }
 
@@ -57,7 +60,7 @@ export function calculateLineAmounts(amount, gstPercent, pricesIncludeTax) {
     totalTax,
     cgst,
     sgst,
-    lineTotal: amount + totalTax
+    lineTotal: amount + totalTax,
   };
 }
 
@@ -65,7 +68,10 @@ function enrichBill(bill) {
   if (!bill) return null;
 
   const totalPaid = (bill.payments || []).reduce((sum, p) => sum + p.amount, 0);
-  const totalRefunded = (bill.refunds || []).reduce((sum, r) => sum + r.amount, 0);
+  const totalRefunded = (bill.refunds || []).reduce(
+    (sum, r) => sum + r.amount,
+    0,
+  );
   const netCollected = totalPaid - totalRefunded;
   const remainingBalance = Math.max(0, bill.grandTotal - totalPaid);
 
@@ -74,7 +80,7 @@ function enrichBill(bill) {
     totalPaid,
     totalRefunded,
     netCollected,
-    remainingBalance
+    remainingBalance,
   };
 }
 
@@ -82,7 +88,7 @@ export const billingService = {
   async getBillById(id) {
     const bill = await billingRepository.findBillById(id);
     if (!bill) {
-      throw new NotFoundError('Bill not found', 'BILL_NOT_FOUND');
+      throw new NotFoundError("Bill not found", "BILL_NOT_FOUND");
     }
     return enrichBill(bill);
   },
@@ -105,38 +111,40 @@ export const billingService = {
     const table = await prisma.table.findUnique({ where: { id: targetId } });
     if (table) {
       openOrders = await prisma.order.findMany({
-        where: { tableId: targetId, status: 'OPEN' },
+        where: { tableId: targetId, status: "OPEN" },
         include: {
           items: {
-            include: { menuItem: true }
-          }
-        }
+            include: { menuItem: true },
+          },
+        },
       });
     } else {
       const singleOrder = await prisma.order.findUnique({
         where: { id: targetId },
-        include: { items: { include: { menuItem: true } } }
+        include: { items: { include: { menuItem: true } } },
       });
-      if (singleOrder && singleOrder.orderType === 'PARCEL') {
+      if (singleOrder && singleOrder.orderType === "PARCEL") {
         return []; // Takeaways are prepaid — skip kitchen prep status check
       }
-      if (singleOrder && singleOrder.status === 'OPEN') {
+      if (singleOrder && singleOrder.status === "OPEN") {
         openOrders = [singleOrder];
       }
     }
 
     const unfinished = [];
     for (const order of openOrders) {
-      if (order.orderType === 'PARCEL') continue;
-      if (order.kitchenStatus !== 'SERVED') {
+      if (order.orderType === "PARCEL") continue;
+      if (order.kitchenStatus !== "SERVED") {
         unfinished.push({
           orderId: order.id,
           kitchenStatus: order.kitchenStatus,
           createdAt: order.createdAt,
-          items: (order.items || []).filter((i) => !i.voidedAt).map((i) => ({
-            name: i.menuItem?.name || 'Item',
-            quantity: i.quantity
-          }))
+          items: (order.items || [])
+            .filter((i) => !i.voidedAt)
+            .map((i) => ({
+              name: i.menuItem?.name || "Item",
+              quantity: i.quantity,
+            })),
         });
       }
     }
@@ -151,37 +159,48 @@ export const billingService = {
     let unbilledSessions = [];
 
     if (targetId) {
-      table = await prisma.table.findUnique({ where: { id: targetId }, include: { zone: true } });
+      table = await prisma.table.findUnique({
+        where: { id: targetId },
+        include: { zone: true },
+      });
     }
 
     if (table) {
       openOrders = await prisma.order.findMany({
-        where: { tableId: targetId, status: 'OPEN' },
-        include: { items: { include: { menuItem: true } } }
+        where: { tableId: targetId, status: "OPEN" },
+        include: { items: { include: { menuItem: true } } },
       });
       unbilledSessions = await prisma.gamingSession.findMany({
-        where: { tableId: targetId, billId: null, voidedAt: null }
+        where: { tableId: targetId, billId: null, voidedAt: null },
       });
     } else if (targetId) {
       const singleOrder = await prisma.order.findUnique({
         where: { id: targetId },
-        include: { items: { include: { menuItem: true } } }
+        include: { items: { include: { menuItem: true } } },
       });
-      if (singleOrder && singleOrder.status === 'OPEN') {
+      if (singleOrder && singleOrder.status === "OPEN") {
         openOrders = [singleOrder];
-        table = { id: null, name: `Parcel Order #${singleOrder.dailyOrderNumber || ''}`, zone: { name: 'PARCEL / TAKEAWAY' } };
+        table = {
+          id: null,
+          name: `Parcel Order #${singleOrder.dailyOrderNumber || ""}`,
+          zone: { name: "PARCEL / TAKEAWAY" },
+        };
       }
     }
 
     if (!table && openOrders.length === 0) {
-      throw new NotFoundError('Table or Order not found for billing preview', 'NOT_FOUND');
+      throw new NotFoundError(
+        "Table or Order not found for billing preview",
+        "NOT_FOUND",
+      );
     }
 
-    const [taxSettings, gamingSettings, unfinishedKitchenOrders] = await Promise.all([
-      taxSettingsService.getSettings(),
-      gamingSettingsService.getSettings(),
-      this.checkKitchenStatus(targetId)
-    ]);
+    const [taxSettings, gamingSettings, unfinishedKitchenOrders] =
+      await Promise.all([
+        taxSettingsService.getSettings(),
+        gamingSettingsService.getSettings(),
+        this.checkKitchenStatus(targetId),
+      ]);
     const graceMinutes = gamingSettings?.gamingGracePeriodMinutes ?? 5;
     const pricesIncludeTax = Boolean(taxSettings?.pricesIncludeTax);
     const now = new Date();
@@ -196,7 +215,7 @@ export const billingService = {
         foodTotal += itemTotal;
         lines.push({
           subtotal: itemTotal,
-          gstPercent: Number(item.gstPercentSnapshot || 5)
+          gstPercent: Number(item.gstPercentSnapshot || 5),
         });
       }
     }
@@ -204,27 +223,31 @@ export const billingService = {
     let gamingTotal = 0;
     const enrichedUnbilledSessions = [];
     for (const session of unbilledSessions) {
-      const sessionEndTime = (session.status === 'ACTIVE' || !session.endTime) ? now : session.endTime;
-      const elapsedMinutes = Math.max(1, Math.ceil((sessionEndTime - new Date(session.startTime)) / (1000 * 60)));
+      const sessionEndTime =
+        session.status === "ACTIVE" || !session.endTime ? now : session.endTime;
+      const elapsedMinutes = Math.max(
+        1,
+        Math.ceil((sessionEndTime - new Date(session.startTime)) / (1000 * 60)),
+      );
       const charge = calculateSlotCharge(
         elapsedMinutes,
         session.halfHourRateSnapshot,
         session.hourlyRateSnapshot,
         session.maxChargeCap,
-        graceMinutes
+        graceMinutes,
       );
-      if (session.status === 'CLOSED' && charge === 0) {
+      if (session.status === "CLOSED" && charge === 0) {
         continue;
       }
       gamingTotal += charge;
       enrichedUnbilledSessions.push({
         ...session,
         elapsedMinutes,
-        calculatedCharge: charge
+        calculatedCharge: charge,
       });
       lines.push({
         subtotal: charge,
-        gstPercent: Number(session.gstPercentSnapshot || 18)
+        gstPercent: Number(session.gstPercentSnapshot || 18),
       });
     }
 
@@ -239,10 +262,16 @@ export const billingService = {
     for (const line of lines) {
       let lineAmount = line.subtotal;
       if (discountAmount > 0 && grossSubtotal > 0) {
-        const lineDiscount = Math.round((line.subtotal / grossSubtotal) * discountAmount);
+        const lineDiscount = Math.round(
+          (line.subtotal / grossSubtotal) * discountAmount,
+        );
         lineAmount = Math.max(0, line.subtotal - lineDiscount);
       }
-      const { cgst, sgst } = calculateLineAmounts(lineAmount, line.gstPercent, pricesIncludeTax);
+      const { cgst, sgst } = calculateLineAmounts(
+        lineAmount,
+        line.gstPercent,
+        pricesIncludeTax,
+      );
       totalCgst += cgst;
       totalSgst += sgst;
     }
@@ -252,7 +281,11 @@ export const billingService = {
       : Math.max(0, grossSubtotal - discountAmount) + totalCgst + totalSgst;
 
     return {
-      table: { id: table?.id || null, name: table?.name || 'Parcel Order', zone: table?.zone || { name: 'PARCEL / TAKEAWAY' } },
+      table: {
+        id: table?.id || null,
+        name: table?.name || "Parcel Order",
+        zone: table?.zone || { name: "PARCEL / TAKEAWAY" },
+      },
       foodTotal,
       gamingTotal,
       grossSubtotal,
@@ -264,12 +297,13 @@ export const billingService = {
       orders: openOrders,
       gamingSessions: enrichedUnbilledSessions,
       unfinishedKitchenOrders,
-      pricesIncludeTax
+      pricesIncludeTax,
     };
   },
 
   async previewDiscount(targetId) {
-    if (!targetId) return { suggestedDiscountAmount: 0, suggestedDiscountReason: null };
+    if (!targetId)
+      return { suggestedDiscountAmount: 0, suggestedDiscountReason: null };
 
     const activeRules = await discountRuleRepository.findActiveRules();
     if (activeRules.length === 0) {
@@ -282,18 +316,18 @@ export const billingService = {
 
     if (table) {
       openOrders = await prisma.order.findMany({
-        where: { tableId: targetId, status: 'OPEN' },
-        include: { items: true }
+        where: { tableId: targetId, status: "OPEN" },
+        include: { items: true },
       });
       unbilledSessions = await prisma.gamingSession.findMany({
-        where: { tableId: targetId, billId: null, voidedAt: null }
+        where: { tableId: targetId, billId: null, voidedAt: null },
       });
     } else {
       const singleOrder = await prisma.order.findUnique({
         where: { id: targetId },
-        include: { items: true }
+        include: { items: true },
       });
-      if (singleOrder && singleOrder.status === 'OPEN') {
+      if (singleOrder && singleOrder.status === "OPEN") {
         openOrders = [singleOrder];
       }
     }
@@ -313,45 +347,51 @@ export const billingService = {
 
     let gamingTotal = 0;
     for (const session of unbilledSessions) {
-      const sessionEndTime = (session.status === 'ACTIVE' || !session.endTime) ? now : session.endTime;
-      const elapsedMinutes = Math.max(1, Math.ceil((sessionEndTime - new Date(session.startTime)) / (1000 * 60)));
+      const sessionEndTime =
+        session.status === "ACTIVE" || !session.endTime ? now : session.endTime;
+      const elapsedMinutes = Math.max(
+        1,
+        Math.ceil((sessionEndTime - new Date(session.startTime)) / (1000 * 60)),
+      );
       const charge = calculateSlotCharge(
         elapsedMinutes,
         session.halfHourRateSnapshot,
         session.hourlyRateSnapshot,
         session.maxChargeCap,
-        graceMinutes
+        graceMinutes,
       );
-      if (session.status === 'CLOSED' && charge === 0) continue;
+      if (session.status === "CLOSED" && charge === 0) continue;
       gamingTotal += charge;
     }
 
     const grossTotal = foodTotal + gamingTotal;
-    if (grossTotal === 0) return { suggestedDiscountAmount: 0, suggestedDiscountReason: null };
+    if (grossTotal === 0)
+      return { suggestedDiscountAmount: 0, suggestedDiscountReason: null };
 
     const todayDay = now.getDay();
-    const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const currentTimeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 
     let bestDiscountAmount = 0;
     let bestDiscountReason = null;
 
     for (const rule of activeRules) {
-      if (rule.daysOfWeek?.length > 0 && !rule.daysOfWeek.includes(todayDay)) continue;
+      if (rule.daysOfWeek?.length > 0 && !rule.daysOfWeek.includes(todayDay))
+        continue;
       if (rule.startTime && currentTimeStr < rule.startTime) continue;
       if (rule.endTime && currentTimeStr > rule.endTime) continue;
 
       let baseAmount = 0;
-      if (rule.scope === 'ALL') baseAmount = grossTotal;
-      else if (rule.scope === 'CAFE_ONLY') baseAmount = foodTotal;
-      else if (rule.scope === 'GAMING_ONLY') baseAmount = gamingTotal;
-      else if (rule.scope === 'ZONE' && table) {
+      if (rule.scope === "ALL") baseAmount = grossTotal;
+      else if (rule.scope === "CAFE_ONLY") baseAmount = foodTotal;
+      else if (rule.scope === "GAMING_ONLY") baseAmount = gamingTotal;
+      else if (rule.scope === "ZONE" && table) {
         if (table.zoneId === rule.zoneId) baseAmount = gamingTotal;
       }
 
       if (baseAmount <= 0) continue;
 
       let calcDiscount = 0;
-      if (rule.type === 'PERCENTAGE') {
+      if (rule.type === "PERCENTAGE") {
         calcDiscount = Math.round(baseAmount * (Number(rule.value) / 100));
       } else {
         calcDiscount = Math.min(baseAmount, Number(rule.value));
@@ -365,7 +405,7 @@ export const billingService = {
 
     return {
       suggestedDiscountAmount: bestDiscountAmount,
-      suggestedDiscountReason: bestDiscountReason
+      suggestedDiscountReason: bestDiscountReason,
     };
   },
 
@@ -384,289 +424,356 @@ export const billingService = {
     let singleOrder = null;
 
     if (!table) {
-      singleOrder = await prisma.order.findUnique({ where: { id: targetId }, include: { items: true } });
+      singleOrder = await prisma.order.findUnique({
+        where: { id: targetId },
+        include: { items: true },
+      });
     }
 
     if (!table && !singleOrder) {
-      throw new NotFoundError('Table or Order not found for billing', 'NOT_FOUND');
+      throw new NotFoundError(
+        "Table or Order not found for billing",
+        "NOT_FOUND",
+      );
     }
 
     if (!ignoreKitchenWarning) {
       const unfinished = await this.checkKitchenStatus(targetId);
       if (unfinished.length > 0) {
-        const err = new ValidationError('Order has unfinished kitchen items that have not been served yet', 'KITCHEN_NOT_FINISHED');
+        const err = new ValidationError(
+          "Order has unfinished kitchen items that have not been served yet",
+          "KITCHEN_NOT_FINISHED",
+        );
         err.data = { unfinishedOrders: unfinished };
         throw err;
       }
     }
 
     if (discountAmount > 0 && (!discountReason || !discountReason.trim())) {
-      throw new ValidationError('A discount reason is mandatory whenever a discount is applied', 'DISCOUNT_REASON_REQUIRED');
+      throw new ValidationError(
+        "A discount reason is mandatory whenever a discount is applied",
+        "DISCOUNT_REASON_REQUIRED",
+      );
     }
 
-    if (table && table.status === 'billing_in_progress') {
-      throw new ConflictError('Billing checkout is already in progress for this table. Please wait.', 'BILLING_IN_PROGRESS');
+    if (table && table.status === "billing_in_progress") {
+      throw new ConflictError(
+        "Billing checkout is already in progress for this table. Please wait.",
+        "BILLING_IN_PROGRESS",
+      );
     }
 
-    const taxSettings = await taxSettingsService.getSettings();
-    const paymentSettings = await paymentSettingsService.getSettings();
-    const gamingSettings = await gamingSettingsService.getSettings();
+    const [taxSettings, paymentSettings, gamingSettings] = await Promise.all([
+      taxSettingsService.getSettings(),
+      paymentSettingsService.getSettings(),
+      gamingSettingsService.getSettings(),
+    ]);
     const graceMinutes = gamingSettings?.gamingGracePeriodMinutes ?? 5;
     const pricesIncludeTax = Boolean(taxSettings?.pricesIncludeTax);
     const now = new Date();
 
-    const createdBill = await prisma.$transaction(async (tx) => {
-      let openOrders = [];
-      let unbilledSessions = [];
+    const createdBill = await prisma.$transaction(
+      async (tx) => {
+        let openOrders = [];
+        let unbilledSessions = [];
 
-      if (table) {
-        await tx.table.update({
-          where: { id: targetId },
-          data: { status: 'OCCUPIED' }
-        });
-
-        openOrders = await tx.order.findMany({
-          where: { tableId: targetId, status: 'OPEN' },
-          include: { items: true }
-        });
-
-        unbilledSessions = await tx.gamingSession.findMany({
-          where: { tableId: targetId, billId: null, voidedAt: null }
-        });
-      } else if (singleOrder) {
-        openOrders = [singleOrder];
-      }
-
-      const sessionChargesList = [];
-      const zeroChargeGhostSessionsToVoid = [];
-
-      for (const session of unbilledSessions) {
-        let sessionEndTime = session.endTime;
-        if (session.status === 'ACTIVE' || !sessionEndTime) {
-          sessionEndTime = now;
-          await tx.gamingSession.update({
-            where: { id: session.id },
-            data: { endTime: sessionEndTime, status: 'CLOSED' }
-          });
-        }
-
-        const elapsedMinutes = Math.max(1, Math.ceil((sessionEndTime - new Date(session.startTime)) / (1000 * 60)));
-        const charge = calculateSlotCharge(
-          elapsedMinutes,
-          session.halfHourRateSnapshot,
-          session.hourlyRateSnapshot,
-          session.maxChargeCap,
-          graceMinutes
-        );
-
-        if (session.status === 'CLOSED' && charge === 0) {
-          zeroChargeGhostSessionsToVoid.push(session.id);
-          continue;
-        }
-
-        sessionChargesList.push({
-          charge,
-          gstPercent: Number(session.gstPercentSnapshot || 18)
-        });
-      }
-
-      if (zeroChargeGhostSessionsToVoid.length > 0) {
-        await tx.gamingSession.updateMany({
-          where: { id: { in: zeroChargeGhostSessionsToVoid } },
-          data: {
-            voidedAt: now,
-            voidReason: 'Auto-cleared zero-charge closed ghost session'
-          }
-        });
-      }
-
-      const lines = [];
-      let foodTotal = 0;
-
-      for (const order of openOrders) {
-        for (const item of order.items) {
-          if (item.voidedAt) continue;
-          const itemTotal = item.priceSnapshot * item.quantity;
-          foodTotal += itemTotal;
-          lines.push({
-            subtotal: itemTotal,
-            gstPercent: Number(item.gstPercentSnapshot || 5)
-          });
-        }
-      }
-
-      let gamingTotal = 0;
-      for (const sc of sessionChargesList) {
-        gamingTotal += sc.charge;
-        lines.push({
-          subtotal: sc.charge,
-          gstPercent: sc.gstPercent
-        });
-      }
-
-      const grossSubtotal = foodTotal + gamingTotal;
-
-      if (grossSubtotal === 0) {
-        throw new ValidationError('No unbilled orders or gaming sessions found to bill', 'NOTHING_TO_BILL');
-      }
-
-      // ── Loyalty Redemption Calculation ──
-      const effectiveCustomerId = customerId || openOrders[0]?.customerId || null;
-      let loyaltyDiscountAmount = 0;
-      let loyaltyPointsRedeemed = 0;
-      let selectedRedemptionRuleId = null;
-
-      if (loyaltyRedemptionRuleId) {
-        const loyaltySettings = await loyaltySettingsRepository.getSettings(tx);
-        if (!loyaltySettings.isEnabled) {
-          throw new ValidationError('Loyalty program is not currently enabled', 'LOYALTY_DISABLED');
-        }
-        if (!effectiveCustomerId) {
-          throw new ValidationError('A customer must be attached to redeem loyalty points', 'CUSTOMER_REQUIRED_FOR_LOYALTY');
-        }
-        const currentBalance = await loyaltyTransactionRepository.getCustomerBalance(effectiveCustomerId, tx);
-        const rule = await tx.loyaltyRedemptionRule.findUnique({ where: { id: loyaltyRedemptionRuleId } });
-        if (!rule || !rule.isActive) {
-          throw new ValidationError('Selected loyalty redemption rule is invalid or inactive', 'INVALID_REDEMPTION_RULE');
-        }
-        if (rule.pointsRequired > currentBalance) {
-          throw new ValidationError(`Insufficient points balance (${currentBalance} available, ${rule.pointsRequired} required)`, 'INSUFFICIENT_LOYALTY_POINTS');
-        }
-
-        const preLoyaltyBase = Math.max(0, grossSubtotal - discountAmount);
-        let calculatedDiscount = 0;
-        if (rule.discountType === 'PERCENTAGE') {
-          calculatedDiscount = Math.round((preLoyaltyBase * Number(rule.discountValue)) / 100);
-        } else if (rule.discountType === 'FLAT') {
-          calculatedDiscount = Number(rule.discountValue);
-        }
-
-        if (loyaltySettings.maxRedemptionPercentOfBill !== null) {
-          const maxCap = Math.round((preLoyaltyBase * loyaltySettings.maxRedemptionPercentOfBill) / 100);
-          calculatedDiscount = Math.min(calculatedDiscount, maxCap);
-        }
-
-        loyaltyDiscountAmount = Math.min(calculatedDiscount, preLoyaltyBase);
-        loyaltyPointsRedeemed = rule.pointsRequired;
-        selectedRedemptionRuleId = rule.id;
-      }
-
-      const totalDiscount = discountAmount + loyaltyDiscountAmount;
-      let totalCgst = 0;
-      let totalSgst = 0;
-
-      for (const line of lines) {
-        let lineAmount = line.subtotal;
-        if (totalDiscount > 0 && grossSubtotal > 0) {
-          const lineDiscount = Math.round((line.subtotal / grossSubtotal) * totalDiscount);
-          lineAmount = Math.max(0, line.subtotal - lineDiscount);
-        }
-        const { cgst, sgst } = calculateLineAmounts(lineAmount, line.gstPercent, pricesIncludeTax);
-        totalCgst += cgst;
-        totalSgst += sgst;
-      }
-
-      const grandTotal = pricesIncludeTax
-        ? Math.max(0, grossSubtotal - totalDiscount)
-        : Math.max(0, grossSubtotal - totalDiscount) + totalCgst + totalSgst;
-
-      const { invoiceNumber, financialYear } = await generateInvoiceNumber(tx, now);
-      const paymentObj = payment || billData?.payment;
-      let initialPaymentStatus = 'UNPAID';
-      if (paymentObj) {
-        initialPaymentStatus = paymentObj.amount >= grandTotal ? 'PAID' : 'PARTIALLY_PAID';
-      } else if (autoPayMethod || paymentSettings?.autoMarkBillsPaidInFull) {
-        initialPaymentStatus = 'PAID';
-      }
-
-      const bill = await tx.bill.create({
-        data: {
-          invoiceNumber,
-          financialYear,
-          tableId: table ? targetId : null,
-          staffId,
-          customerId: effectiveCustomerId,
-          foodTotal,
-          gamingTotal,
-          cgstAmount: totalCgst,
-          sgstAmount: totalSgst,
-          discountAmount,
-          discountReason: discountAmount > 0 ? (discountReason?.trim() || 'Staff Discount') : null,
-          loyaltyDiscountAmount,
-          loyaltyPointsRedeemed,
-          loyaltyRedemptionRuleId: selectedRedemptionRuleId,
-          grandTotal,
-          paymentStatus: initialPaymentStatus,
-          correctionOfBillId: correctionOfBillId || null
-        }
-      });
-
-      // Record REDEEMED transaction if points spent
-      if (loyaltyPointsRedeemed > 0 && effectiveCustomerId) {
-        await tx.loyaltyTransaction.create({
-          data: {
-            customerId: effectiveCustomerId,
-            billId: bill.id,
-            type: 'REDEEMED',
-            pointsDelta: -loyaltyPointsRedeemed,
-            staffId
-          }
-        });
-      }
-
-      if (openOrders.length > 0) {
-        await tx.order.updateMany({
-          where: { id: { in: openOrders.map((o) => o.id) } },
-          data: { billId: bill.id, status: 'BILLED' }
-        });
-      }
-
-      if (unbilledSessions.length > 0) {
-        await tx.gamingSession.updateMany({
-          where: { id: { in: unbilledSessions.map((s) => s.id) } },
-          data: { billId: bill.id }
-        });
-      }
-
-      if (paymentObj) {
-        await tx.payment.create({
-          data: {
-            billId: bill.id,
-            amount: paymentObj.amount,
-            method: paymentObj.method,
-            reference: paymentObj.reference?.trim() || null,
-            paidAt: now
-          }
-        });
-      } else if (autoPayMethod) {
-        await tx.payment.create({
-          data: {
-            billId: bill.id,
-            amount: grandTotal,
-            method: autoPayMethod,
-            reference: 'Instant Quick Checkout Settlement',
-            paidAt: now
-          }
-        });
-      }
-
-      if (table) {
-        const isFree = await canTableBeFreed(targetId, tx);
-        if (initialPaymentStatus === 'PAID' || isFree) {
+        if (table) {
           await tx.table.update({
             where: { id: targetId },
-            data: { status: 'FREE' }
+            data: { status: "OCCUPIED" },
+          });
+
+          [openOrders, unbilledSessions] = await Promise.all([
+            tx.order.findMany({
+              where: { tableId: targetId, status: "OPEN" },
+              include: { items: true },
+            }),
+            tx.gamingSession.findMany({
+              where: { tableId: targetId, billId: null, voidedAt: null },
+            }),
+          ]);
+        } else if (singleOrder) {
+          openOrders = [singleOrder];
+        }
+
+        const sessionChargesList = [];
+        const zeroChargeGhostSessionsToVoid = [];
+
+        for (const session of unbilledSessions) {
+          let sessionEndTime = session.endTime;
+          if (session.status === "ACTIVE" || !sessionEndTime) {
+            sessionEndTime = now;
+            await tx.gamingSession.update({
+              where: { id: session.id },
+              data: { endTime: sessionEndTime, status: "CLOSED" },
+            });
+          }
+
+          const elapsedMinutes = Math.max(
+            1,
+            Math.ceil(
+              (sessionEndTime - new Date(session.startTime)) / (1000 * 60),
+            ),
+          );
+          const charge = calculateSlotCharge(
+            elapsedMinutes,
+            session.halfHourRateSnapshot,
+            session.hourlyRateSnapshot,
+            session.maxChargeCap,
+            graceMinutes,
+          );
+
+          if (session.status === "CLOSED" && charge === 0) {
+            zeroChargeGhostSessionsToVoid.push(session.id);
+            continue;
+          }
+
+          sessionChargesList.push({
+            charge,
+            gstPercent: Number(session.gstPercentSnapshot || 18),
           });
         }
-      }
 
-      // Credit EARNED points if bill is created directly in PAID status
-      if (initialPaymentStatus === 'PAID') {
-        await loyaltyTransactionService.creditLoyaltyPointsIfEarned(bill, tx);
-      }
+        if (zeroChargeGhostSessionsToVoid.length > 0) {
+          await tx.gamingSession.updateMany({
+            where: { id: { in: zeroChargeGhostSessionsToVoid } },
+            data: {
+              voidedAt: now,
+              voidReason: "Auto-cleared zero-charge closed ghost session",
+            },
+          });
+        }
 
-      return bill;
-    }, { timeout: 20000, maxWait: 5000 });
+        const lines = [];
+        let foodTotal = 0;
+
+        for (const order of openOrders) {
+          for (const item of order.items) {
+            if (item.voidedAt) continue;
+            const itemTotal = item.priceSnapshot * item.quantity;
+            foodTotal += itemTotal;
+            lines.push({
+              subtotal: itemTotal,
+              gstPercent: Number(item.gstPercentSnapshot || 5),
+            });
+          }
+        }
+
+        let gamingTotal = 0;
+        for (const sc of sessionChargesList) {
+          gamingTotal += sc.charge;
+          lines.push({
+            subtotal: sc.charge,
+            gstPercent: sc.gstPercent,
+          });
+        }
+
+        const grossSubtotal = foodTotal + gamingTotal;
+
+        if (grossSubtotal === 0) {
+          throw new ValidationError(
+            "No unbilled orders or gaming sessions found to bill",
+            "NOTHING_TO_BILL",
+          );
+        }
+
+        // ── Loyalty Redemption Calculation ──
+        const effectiveCustomerId =
+          customerId || openOrders[0]?.customerId || null;
+        let loyaltyDiscountAmount = 0;
+        let loyaltyPointsRedeemed = 0;
+        let selectedRedemptionRuleId = null;
+
+        if (loyaltyRedemptionRuleId) {
+          const loyaltySettings =
+            await loyaltySettingsRepository.getSettings(tx);
+          if (!loyaltySettings.isEnabled) {
+            throw new ValidationError(
+              "Loyalty program is not currently enabled",
+              "LOYALTY_DISABLED",
+            );
+          }
+          if (!effectiveCustomerId) {
+            throw new ValidationError(
+              "A customer must be attached to redeem loyalty points",
+              "CUSTOMER_REQUIRED_FOR_LOYALTY",
+            );
+          }
+          const currentBalance =
+            await loyaltyTransactionRepository.getCustomerBalance(
+              effectiveCustomerId,
+              tx,
+            );
+          const rule = await tx.loyaltyRedemptionRule.findUnique({
+            where: { id: loyaltyRedemptionRuleId },
+          });
+          if (!rule || !rule.isActive) {
+            throw new ValidationError(
+              "Selected loyalty redemption rule is invalid or inactive",
+              "INVALID_REDEMPTION_RULE",
+            );
+          }
+          if (rule.pointsRequired > currentBalance) {
+            throw new ValidationError(
+              `Insufficient points balance (${currentBalance} available, ${rule.pointsRequired} required)`,
+              "INSUFFICIENT_LOYALTY_POINTS",
+            );
+          }
+
+          const preLoyaltyBase = Math.max(0, grossSubtotal - discountAmount);
+          let calculatedDiscount = 0;
+          if (rule.discountType === "PERCENTAGE") {
+            calculatedDiscount = Math.round(
+              (preLoyaltyBase * Number(rule.discountValue)) / 100,
+            );
+          } else if (rule.discountType === "FLAT") {
+            calculatedDiscount = Number(rule.discountValue);
+          }
+
+          if (loyaltySettings.maxRedemptionPercentOfBill !== null) {
+            const maxCap = Math.round(
+              (preLoyaltyBase * loyaltySettings.maxRedemptionPercentOfBill) /
+                100,
+            );
+            calculatedDiscount = Math.min(calculatedDiscount, maxCap);
+          }
+
+          loyaltyDiscountAmount = Math.min(calculatedDiscount, preLoyaltyBase);
+          loyaltyPointsRedeemed = rule.pointsRequired;
+          selectedRedemptionRuleId = rule.id;
+        }
+
+        const totalDiscount = discountAmount + loyaltyDiscountAmount;
+        let totalCgst = 0;
+        let totalSgst = 0;
+
+        for (const line of lines) {
+          let lineAmount = line.subtotal;
+          if (totalDiscount > 0 && grossSubtotal > 0) {
+            const lineDiscount = Math.round(
+              (line.subtotal / grossSubtotal) * totalDiscount,
+            );
+            lineAmount = Math.max(0, line.subtotal - lineDiscount);
+          }
+          const { cgst, sgst } = calculateLineAmounts(
+            lineAmount,
+            line.gstPercent,
+            pricesIncludeTax,
+          );
+          totalCgst += cgst;
+          totalSgst += sgst;
+        }
+
+        const grandTotal = pricesIncludeTax
+          ? Math.max(0, grossSubtotal - totalDiscount)
+          : Math.max(0, grossSubtotal - totalDiscount) + totalCgst + totalSgst;
+
+        const { invoiceNumber, financialYear } = await generateInvoiceNumber(
+          tx,
+          now,
+        );
+        const paymentObj = payment || billData?.payment;
+        let initialPaymentStatus = "UNPAID";
+        if (paymentObj) {
+          initialPaymentStatus =
+            paymentObj.amount >= grandTotal ? "PAID" : "PARTIALLY_PAID";
+        } else if (autoPayMethod || paymentSettings?.autoMarkBillsPaidInFull) {
+          initialPaymentStatus = "PAID";
+        }
+
+        const bill = await tx.bill.create({
+          data: {
+            invoiceNumber,
+            financialYear,
+            tableId: table ? targetId : null,
+            staffId,
+            customerId: effectiveCustomerId,
+            foodTotal,
+            gamingTotal,
+            cgstAmount: totalCgst,
+            sgstAmount: totalSgst,
+            discountAmount,
+            discountReason:
+              discountAmount > 0
+                ? discountReason?.trim() || "Staff Discount"
+                : null,
+            loyaltyDiscountAmount,
+            loyaltyPointsRedeemed,
+            loyaltyRedemptionRuleId: selectedRedemptionRuleId,
+            grandTotal,
+            paymentStatus: initialPaymentStatus,
+            correctionOfBillId: correctionOfBillId || null,
+          },
+        });
+
+        // Record REDEEMED transaction if points spent
+        if (loyaltyPointsRedeemed > 0 && effectiveCustomerId) {
+          await tx.loyaltyTransaction.create({
+            data: {
+              customerId: effectiveCustomerId,
+              billId: bill.id,
+              type: "REDEEMED",
+              pointsDelta: -loyaltyPointsRedeemed,
+              staffId,
+            },
+          });
+        }
+
+        if (openOrders.length > 0) {
+          await tx.order.updateMany({
+            where: { id: { in: openOrders.map((o) => o.id) } },
+            data: { billId: bill.id, status: "BILLED" },
+          });
+        }
+
+        if (unbilledSessions.length > 0) {
+          await tx.gamingSession.updateMany({
+            where: { id: { in: unbilledSessions.map((s) => s.id) } },
+            data: { billId: bill.id },
+          });
+        }
+
+        if (paymentObj) {
+          await tx.payment.create({
+            data: {
+              billId: bill.id,
+              amount: paymentObj.amount,
+              method: paymentObj.method,
+              reference: paymentObj.reference?.trim() || null,
+              paidAt: now,
+            },
+          });
+        } else if (autoPayMethod) {
+          await tx.payment.create({
+            data: {
+              billId: bill.id,
+              amount: grandTotal,
+              method: autoPayMethod,
+              reference: "Instant Quick Checkout Settlement",
+              paidAt: now,
+            },
+          });
+        }
+
+        if (table) {
+          const isFree = await canTableBeFreed(targetId, tx);
+          if (initialPaymentStatus === "PAID" || isFree) {
+            await tx.table.update({
+              where: { id: targetId },
+              data: { status: "FREE" },
+            });
+          }
+        }
+
+        // Credit EARNED points if bill is created directly in PAID status
+        if (initialPaymentStatus === "PAID") {
+          await loyaltyTransactionService.creditLoyaltyPointsIfEarned(bill, tx);
+        }
+
+        return bill;
+      },
+      { timeout: 20000, maxWait: 5000 },
+    );
 
     const fullBill = await this.getBillById(createdBill.id);
     if (table) {
@@ -681,72 +788,88 @@ export const billingService = {
   async voidBill(billId, requestingUser, { reason }) {
     const existingBill = await billingRepository.findBillById(billId);
     if (!existingBill) {
-      throw new NotFoundError('Bill not found', 'BILL_NOT_FOUND');
+      throw new NotFoundError("Bill not found", "BILL_NOT_FOUND");
     }
 
     if (existingBill.voidedAt) {
-      throw new ConflictError('Bill is already voided', 'BILL_ALREADY_VOIDED');
+      throw new ConflictError("Bill is already voided", "BILL_ALREADY_VOIDED");
     }
 
     if (!reason || !reason.trim()) {
-      throw new ValidationError('A reason is mandatory when voiding a bill', 'VOID_REASON_REQUIRED');
+      throw new ValidationError(
+        "A reason is mandatory when voiding a bill",
+        "VOID_REASON_REQUIRED",
+      );
     }
 
     // Phase 19 Step 4: Strict Permission Matrix
     const role = requestingUser?.role;
-    const isPaidOrPartial = existingBill.paymentStatus === 'PAID' || existingBill.paymentStatus === 'PARTIALLY_PAID';
+    const isPaidOrPartial =
+      existingBill.paymentStatus === "PAID" ||
+      existingBill.paymentStatus === "PARTIALLY_PAID";
 
-    if (isPaidOrPartial && role !== 'ADMIN') {
-      throw new ForbiddenError('Only Admin can void a bill that has recorded payments', 'FORBIDDEN_PAID_BILL_VOID');
+    if (isPaidOrPartial && role !== "ADMIN") {
+      throw new ForbiddenError(
+        "Only Admin can void a bill that has recorded payments",
+        "FORBIDDEN_PAID_BILL_VOID",
+      );
     }
 
-    if (!isPaidOrPartial && role !== 'ADMIN' && role !== 'COUNTER') {
-      throw new ForbiddenError('Only Counter or Admin staff can void an unpaid bill', 'FORBIDDEN_BILL_VOID');
+    if (!isPaidOrPartial && role !== "ADMIN" && role !== "COUNTER") {
+      throw new ForbiddenError(
+        "Only Counter or Admin staff can void an unpaid bill",
+        "FORBIDDEN_BILL_VOID",
+      );
     }
 
-    await prisma.$transaction(async (tx) => {
-      // 1. Reverse loyalty transactions (EARNED or REDEEMED)
-      await loyaltyTransactionService.reverseLoyaltyOnVoid(existingBill, tx);
+    await prisma.$transaction(
+      async (tx) => {
+        // 1. Reverse loyalty transactions (EARNED or REDEEMED)
+        await loyaltyTransactionService.reverseLoyaltyOnVoid(existingBill, tx);
 
-      // 2. Mark bill as voided
-      await tx.bill.update({
-        where: { id: billId },
-        data: {
-          voidedAt: new Date(),
-          voidReason: reason.trim(),
-          voidedByStaffId: requestingUser.id
-        }
-      });
-
-      // 3. Unlink attached Orders (billId -> null, status -> OPEN)
-      await tx.order.updateMany({
-        where: { billId },
-        data: { billId: null, status: 'OPEN' }
-      });
-
-      // 4. Void attached Gaming Sessions so they don't linger as unbilled ghost sessions
-      await tx.gamingSession.updateMany({
-        where: { billId },
-        data: {
-          billId: null,
-          voidedAt: new Date(),
-          voidReason: `Voided along with Bill #${existingBill.invoiceNumber || existingBill.id.slice(-6)}`
-        }
-      });
-
-      // 5. Reconcile table status (OCCUPIED if open orders/sessions exist, FREE if clean)
-      if (existingBill.tableId) {
-        const isFree = await canTableBeFreed(existingBill.tableId, tx);
-        await tx.table.update({
-          where: { id: existingBill.tableId },
-          data: { status: isFree ? 'FREE' : 'OCCUPIED' }
+        // 2. Mark bill as voided
+        await tx.bill.update({
+          where: { id: billId },
+          data: {
+            voidedAt: new Date(),
+            voidReason: reason.trim(),
+            voidedByStaffId: requestingUser.id,
+          },
         });
-      }
-    }, { timeout: 20000, maxWait: 5000 });
+
+        // 3. Unlink attached Orders (billId -> null, status -> OPEN)
+        await tx.order.updateMany({
+          where: { billId },
+          data: { billId: null, status: "OPEN" },
+        });
+
+        // 4. Void attached Gaming Sessions so they don't linger as unbilled ghost sessions
+        await tx.gamingSession.updateMany({
+          where: { billId },
+          data: {
+            billId: null,
+            voidedAt: new Date(),
+            voidReason: `Voided along with Bill #${existingBill.invoiceNumber || existingBill.id.slice(-6)}`,
+          },
+        });
+
+        // 5. Reconcile table status (OCCUPIED if open orders/sessions exist, FREE if clean)
+        if (existingBill.tableId) {
+          const isFree = await canTableBeFreed(existingBill.tableId, tx);
+          await tx.table.update({
+            where: { id: existingBill.tableId },
+            data: { status: isFree ? "FREE" : "OCCUPIED" },
+          });
+        }
+      },
+      { timeout: 20000, maxWait: 5000 },
+    );
 
     const fullBill = await this.getBillById(billId);
     if (existingBill.tableId) {
-      const updatedTable = await tableService.getTableById(existingBill.tableId);
+      const updatedTable = await tableService.getTableById(
+        existingBill.tableId,
+      );
       broadcastTableUpdate(updatedTable);
     }
     broadcastBillCreated(fullBill);
@@ -756,25 +879,37 @@ export const billingService = {
 
   async recordRefund(billId, requestingUser, { amount, reason, method }) {
     const role = requestingUser?.role;
-    if (role !== 'ADMIN') {
-      throw new ForbiddenError('Only Admin staff can record refunds', 'FORBIDDEN_REFUND');
+    if (role !== "ADMIN") {
+      throw new ForbiddenError(
+        "Only Admin staff can record refunds",
+        "FORBIDDEN_REFUND",
+      );
     }
 
     const existingBill = await billingRepository.findBillById(billId);
     if (!existingBill) {
-      throw new NotFoundError('Bill not found', 'BILL_NOT_FOUND');
+      throw new NotFoundError("Bill not found", "BILL_NOT_FOUND");
     }
 
     if (!existingBill.voidedAt) {
-      throw new ConflictError('Refunds can only be recorded against voided bills', 'BILL_NOT_VOIDED');
+      throw new ConflictError(
+        "Refunds can only be recorded against voided bills",
+        "BILL_NOT_VOIDED",
+      );
     }
 
     if (!reason || !reason.trim()) {
-      throw new ValidationError('A reason is mandatory when recording a refund', 'REFUND_REASON_REQUIRED');
+      throw new ValidationError(
+        "A reason is mandatory when recording a refund",
+        "REFUND_REASON_REQUIRED",
+      );
     }
 
     if (!amount || amount <= 0) {
-      throw new ValidationError('Refund amount must be greater than 0 paise', 'INVALID_REFUND_AMOUNT');
+      throw new ValidationError(
+        "Refund amount must be greater than 0 paise",
+        "INVALID_REFUND_AMOUNT",
+      );
     }
 
     await prisma.refund.create({
@@ -784,8 +919,8 @@ export const billingService = {
         reason: reason.trim(),
         method,
         staffId: requestingUser.id,
-        createdAt: new Date()
-      }
+        createdAt: new Date(),
+      },
     });
 
     const fullBill = await this.getBillById(billId);
@@ -797,87 +932,108 @@ export const billingService = {
   async addPayment(billId, { amount, method, reference }) {
     const existingBill = await billingRepository.findBillById(billId);
     if (!existingBill) {
-      throw new NotFoundError('Bill not found', 'BILL_NOT_FOUND');
+      throw new NotFoundError("Bill not found", "BILL_NOT_FOUND");
     }
 
     if (existingBill.voidedAt) {
-      throw new ConflictError('Cannot add payment to a voided bill', 'BILL_VOIDED');
+      throw new ConflictError(
+        "Cannot add payment to a voided bill",
+        "BILL_VOIDED",
+      );
     }
 
-    if (existingBill.paymentStatus === 'PAID') {
-      throw new ConflictError('Bill is already fully paid', 'BILL_ALREADY_PAID');
+    if (existingBill.paymentStatus === "PAID") {
+      throw new ConflictError(
+        "Bill is already fully paid",
+        "BILL_ALREADY_PAID",
+      );
     }
 
     // Atomic transaction for payment creation and status re-calculation
-    const result = await prisma.$transaction(async (tx) => {
-      // 1. Create Payment
-      const payment = await tx.payment.create({
-        data: {
-          billId,
-          amount,
-          method,
-          reference: reference || null,
-          paidAt: new Date()
+    const result = await prisma.$transaction(
+      async (tx) => {
+        // 1. Create Payment
+        const payment = await tx.payment.create({
+          data: {
+            billId,
+            amount,
+            method,
+            reference: reference || null,
+            paidAt: new Date(),
+          },
+        });
+
+        // 2. Fetch total paid so far
+        const allPayments = await tx.payment.findMany({
+          where: { billId },
+        });
+        const totalPaid = allPayments.reduce((sum, p) => sum + p.amount, 0);
+
+        // 3. Recompute paymentStatus
+        let newStatus = "UNPAID";
+        if (totalPaid >= existingBill.grandTotal) {
+          newStatus = "PAID";
+        } else if (totalPaid > 0) {
+          newStatus = "PARTIALLY_PAID";
         }
-      });
 
-      // 2. Fetch total paid so far
-      const allPayments = await tx.payment.findMany({
-        where: { billId }
-      });
-      const totalPaid = allPayments.reduce((sum, p) => sum + p.amount, 0);
+        // 4. Update Bill
+        await tx.bill.update({
+          where: { id: billId },
+          data: { paymentStatus: newStatus },
+        });
 
-      // 3. Recompute paymentStatus
-      let newStatus = 'UNPAID';
-      if (totalPaid >= existingBill.grandTotal) {
-        newStatus = 'PAID';
-      } else if (totalPaid > 0) {
-        newStatus = 'PARTIALLY_PAID';
-      }
-
-      // 4. Update Bill
-      await tx.bill.update({
-        where: { id: billId },
-        data: { paymentStatus: newStatus }
-      });
-
-      // 5. If fully paid, credit loyalty points if eligible & check if table can be set back to FREE
-      if (newStatus === 'PAID') {
-        const fullBillForEarn = await tx.bill.findUnique({ where: { id: billId } });
-        if (fullBillForEarn) {
-          await loyaltyTransactionService.creditLoyaltyPointsIfEarned(fullBillForEarn, tx);
-        }
-        if (existingBill.tableId) {
-          const isFree = await canTableBeFreed(existingBill.tableId, tx);
-          if (isFree) {
-            await tx.table.update({
-              where: { id: existingBill.tableId },
-              data: { status: 'FREE' }
-            });
+        // 5. If fully paid, credit loyalty points if eligible & check if table can be set back to FREE
+        if (newStatus === "PAID") {
+          const fullBillForEarn = await tx.bill.findUnique({
+            where: { id: billId },
+          });
+          if (fullBillForEarn) {
+            await loyaltyTransactionService.creditLoyaltyPointsIfEarned(
+              fullBillForEarn,
+              tx,
+            );
+          }
+          if (existingBill.tableId) {
+            const isFree = await canTableBeFreed(existingBill.tableId, tx);
+            if (isFree) {
+              await tx.table.update({
+                where: { id: existingBill.tableId },
+                data: { status: "FREE" },
+              });
+            }
           }
         }
-      }
 
-      return payment;
-    }, { timeout: 15000, maxWait: 5000 });
+        return payment;
+      },
+      { timeout: 15000, maxWait: 5000 },
+    );
 
     const fullBill = await this.getBillById(billId);
     if (existingBill.tableId) {
-      const updatedTable = await tableService.getTableById(existingBill.tableId);
+      const updatedTable = await tableService.getTableById(
+        existingBill.tableId,
+      );
       broadcastTableUpdate(updatedTable);
     }
 
     // Non-blocking fire-and-forget SMS notification for paid bills with linked customer
-    if (fullBill.paymentStatus === 'PAID' && fullBill.customer?.phone) {
-      smsService.sendBillPaidSms({
-        customerId: fullBill.customerId,
-        phone: fullBill.customer.phone,
-        billId: fullBill.id,
-        grandTotal: fullBill.grandTotal,
-        paymentMethod: method
-      }).catch((smsErr) => {
-        console.error('📱 Non-blocking SMS notification error:', smsErr.message);
-      });
+    if (fullBill.paymentStatus === "PAID" && fullBill.customer?.phone) {
+      smsService
+        .sendBillPaidSms({
+          customerId: fullBill.customerId,
+          phone: fullBill.customer.phone,
+          billId: fullBill.id,
+          grandTotal: fullBill.grandTotal,
+          paymentMethod: method,
+        })
+        .catch((smsErr) => {
+          console.error(
+            "📱 Non-blocking SMS notification error:",
+            smsErr.message,
+          );
+        });
     }
 
     broadcastBillCreated(fullBill);
@@ -885,13 +1041,25 @@ export const billingService = {
     return fullBill;
   },
 
-  async bulkSettleBills(billIds, { method = 'CASH', reference = 'Bulk Settlement' }) {
+  async bulkSettleBills(
+    billIds,
+    { method = "CASH", reference = "Bulk Settlement" },
+  ) {
     const settledBills = [];
     for (const id of billIds) {
       try {
         const bill = await this.getBillById(id);
-        if (bill && !bill.voidedAt && bill.paymentStatus !== 'PAID' && bill.remainingBalance > 0) {
-          const updated = await this.addPayment(id, { amount: bill.remainingBalance, method, reference });
+        if (
+          bill &&
+          !bill.voidedAt &&
+          bill.paymentStatus !== "PAID" &&
+          bill.remainingBalance > 0
+        ) {
+          const updated = await this.addPayment(id, {
+            amount: bill.remainingBalance,
+            method,
+            reference,
+          });
           settledBills.push(updated);
         }
       } catch (err) {
@@ -904,12 +1072,12 @@ export const billingService = {
   async updateBillCustomer(billId, customerId) {
     const existingBill = await billingRepository.findBillById(billId);
     if (!existingBill) {
-      throw new NotFoundError('Bill not found', 'BILL_NOT_FOUND');
+      throw new NotFoundError("Bill not found", "BILL_NOT_FOUND");
     }
 
     await prisma.bill.update({
       where: { id: billId },
-      data: { customerId }
+      data: { customerId },
     });
 
     return this.getBillById(billId);
@@ -925,37 +1093,46 @@ export const billingService = {
         orders: {
           include: {
             items: {
-              include: { menuItem: true, voidedByStaff: { select: { id: true, username: true } } }
-            }
-          }
+              include: {
+                menuItem: true,
+                voidedByStaff: { select: { id: true, username: true } },
+              },
+            },
+          },
         },
         reopenedOrders: {
           include: {
             items: {
-              include: { menuItem: true, voidedByStaff: { select: { id: true, username: true } } }
-            }
-          }
-        }
-      }
+              include: {
+                menuItem: true,
+                voidedByStaff: { select: { id: true, username: true } },
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!bill) {
-      throw new NotFoundError('Bill not found', 'BILL_NOT_FOUND');
+      throw new NotFoundError("Bill not found", "BILL_NOT_FOUND");
     }
 
     const menuItems = await prisma.menuItem.findMany({
       where: { isAvailable: true },
-      orderBy: { name: 'asc' }
+      orderBy: { name: "asc" },
     });
 
-    const combinedOrders = [...(bill.orders || []), ...(bill.reopenedOrders || [])];
+    const combinedOrders = [
+      ...(bill.orders || []),
+      ...(bill.reopenedOrders || []),
+    ];
     const uniqueOrdersMap = new Map();
     combinedOrders.forEach((o) => uniqueOrdersMap.set(o.id, o));
 
     return {
       bill,
       orders: Array.from(uniqueOrdersMap.values()),
-      menuItems
+      menuItems,
     };
-  }
+  },
 };
