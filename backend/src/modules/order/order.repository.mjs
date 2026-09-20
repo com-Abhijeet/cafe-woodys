@@ -13,7 +13,7 @@ async function getNextDailyOrderNumber(tx) {
 
 export const orderRepository = {
   async findByTableId(tableId, status = 'OPEN') {
-    const where = { tableId };
+    const where = { tableId, boardClearedAt: null };
     if (status) where.status = status;
 
     const orders = await prisma.order.findMany({

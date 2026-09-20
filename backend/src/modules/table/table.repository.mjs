@@ -8,10 +8,10 @@ export const tableRepository = {
       include: {
         zone: true,
         gamingSessions: {
-          where: { billId: null }
+          where: { billId: null, voidedAt: null }
         },
         orders: {
-          where: { status: 'OPEN' }
+          where: { status: 'OPEN', boardClearedAt: null }
         }
       },
       orderBy: { name: 'asc' }
@@ -24,10 +24,10 @@ export const tableRepository = {
       include: {
         zone: true,
         gamingSessions: {
-          where: { billId: null }
+          where: { billId: null, voidedAt: null }
         },
         orders: {
-          where: { status: 'OPEN' },
+          where: { status: 'OPEN', boardClearedAt: null },
           include: {
             items: {
               include: { menuItem: true }
@@ -52,7 +52,7 @@ export const tableRepository = {
       include: {
         zone: true,
         gamingSessions: {
-          where: { billId: null }
+          where: { billId: null, voidedAt: null }
         }
       }
     });
