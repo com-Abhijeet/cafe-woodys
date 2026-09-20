@@ -1,9 +1,21 @@
 import pg from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-const neonUrl = 'postgresql://neondb_owner:npg_ZCRrwT0gJ3op@ep-super-cell-az57ucg0-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
-const supabaseUrl = 'postgresql://postgres:WOODIES@2026@db.jxejclxtxbrwecczpauf.supabase.co:5432/postgres';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, '../.env') });
+
+const neonUrl = process.env.DATABASE_URL.includes('neon.tech') 
+  ? process.env.DATABASE_URL 
+  : 'postgresql://neondb_owner:npg_ZCRrwT0gJ3op@ep-super-cell-az57ucg0-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
+
+const supabaseUrl = process.env.SUPABASE_DIRECT_URL || process.env.DATABASE_URL;
+
+console.log('Source DB (Neon):', neonUrl.split('@')[1] || neonUrl);
+console.log('Target DB (Supabase):', supabaseUrl.split('@')[1] || supabaseUrl);
 
 // Source connection (Neon DB) - READ ONLY
 const neonPool = new pg.Pool({ connectionString: neonUrl });
@@ -22,7 +34,6 @@ function sanitizeRow(row) {
   for (const key of Object.keys(newRow)) {
     const val = newRow[key];
     if (val !== null && typeof val === 'object' && val.s !== undefined && val.e !== undefined && val.c !== undefined) {
-      // It's a Prisma.Decimal instance
       newRow[key] = val.toString();
     }
   }
@@ -64,9 +75,7 @@ async function runFullMigration() {
   console.log('🚀 STARTING FULL DATA MIGRATION (NEONDB -> SUPABASE)');
   console.log('====================================================');
 
-  // Ordered strictly by foreign key dependency hierarchy
   const migrationSequence = [
-    // 1. Singletons & Base Settings
     'businessProfile',
     'taxSettings',
     'paymentSettings',
@@ -77,8 +86,6 @@ async function runFullMigration() {
     'daybookSettings',
     'printerConfig',
     'staff',
-
-    // 2. Base Catalog & Structure
     'zone',
     'table',
     'menuItem',
@@ -86,19 +93,13 @@ async function runFullMigration() {
     'supplier',
     'loyaltyRedemptionRule',
     'discountRule',
-
-    // 3. Child Masters & CRM
     'recipeIngredient',
     'customer',
-
-    // 4. Purchasing & Stock
     'purchaseOrder',
     'purchaseOrderItem',
     'purchasePayment',
     'inventoryAdjustment',
-
-    // 5. Billing & Sales Transactions
-    'bill',               // Bills inserted before Orders & GamingSessions so billId FKs resolve cleanly
+    'bill',
     'order',
     'orderItem',
     'gamingSession',

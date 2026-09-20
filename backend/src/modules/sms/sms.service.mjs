@@ -2,16 +2,49 @@ import { smsProvider } from './sms.provider.mjs';
 import { smsRepository } from './sms.repository.mjs';
 
 export const smsService = {
-  async sendBillPaidSms({ customerId, phone, billId, grandTotal, paymentMethod }) {
+  async sendBillPaidSms({ customerId, phone, billId, grandTotal, paymentMethod, fullBill }) {
     if (!phone || !customerId) return null;
 
     const shortId = billId ? billId.slice(-6).toUpperCase() : 'BILL';
     const amountRs = (grandTotal / 100).toFixed(2);
-    const message = `Thanks for visiting Cafe Woody's! Your bill #${shortId} for ₹${amountRs} has been paid via ${paymentMethod || 'POS'}. We hope to see you again soon!`;
+
+    // Extract item breakdown for the SMS
+    let itemsSummary = '';
+    if (fullBill?.orders) {
+      const itemMap = new Map();
+      for (const order of fullBill.orders) {
+        for (const item of (order.items || [])) {
+          if (item.voidedAt) continue;
+          const name = item.menuItem?.name || 'Item';
+          itemMap.set(name, (itemMap.get(name) || 0) + item.quantity);
+        }
+      }
+      const parts = [];
+      itemMap.forEach((qty, name) => parts.push(`${qty}x ${name}`));
+      itemsSummary = parts.join(', ');
+    }
+
+    if (!itemsSummary) {
+      itemsSummary = 'Café & Gaming Services';
+    }
+
+    // Keep item summary concise for SMS (max 90 chars)
+    if (itemsSummary.length > 90) {
+      itemsSummary = itemsSummary.slice(0, 87) + '...';
+    }
+
+    const templateParams = {
+      bill_no: shortId,
+      items: itemsSummary,
+      total: amountRs,
+      payment_mode: paymentMethod || 'POS'
+    };
+
+    const auditMessage = `Bill #${shortId} | Items: ${itemsSummary} | Total: ₹${amountRs} | Mode: ${paymentMethod || 'POS'}`;
 
     let status = 'FAILED';
     try {
-      const result = await smsProvider.sendSms(phone, message);
+      const result = await smsProvider.sendSms(phone, templateParams);
       if (result.success) {
         status = 'SENT';
       }
@@ -25,7 +58,7 @@ export const smsService = {
       return await smsRepository.createLog({
         customerId,
         phone,
-        message,
+        message: auditMessage,
         status
       });
     } catch (logErr) {
@@ -38,3 +71,4 @@ export const smsService = {
     return smsRepository.findByCustomerId(customerId);
   }
 };
+

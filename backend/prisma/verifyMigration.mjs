@@ -1,9 +1,18 @@
 import pg from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-const neonUrl = 'postgresql://neondb_owner:npg_ZCRrwT0gJ3op@ep-super-cell-az57ucg0-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
-const supabaseUrl = 'postgresql://postgres:WOODIES@2026@db.jxejclxtxbrwecczpauf.supabase.co:5432/postgres';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, '../.env') });
+
+const neonUrl = process.env.DATABASE_URL.includes('neon.tech') 
+  ? process.env.DATABASE_URL 
+  : 'postgresql://neondb_owner:npg_ZCRrwT0gJ3op@ep-super-cell-az57ucg0-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
+
+const supabaseUrl = process.env.SUPABASE_DIRECT_URL || process.env.DATABASE_URL;
 
 const neonPool = new pg.Pool({ connectionString: neonUrl });
 const neonDb = new PrismaClient({ adapter: new PrismaPg(neonPool) });

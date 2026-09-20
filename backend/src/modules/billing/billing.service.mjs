@@ -1027,6 +1027,7 @@ export const billingService = {
           billId: fullBill.id,
           grandTotal: fullBill.grandTotal,
           paymentMethod: method,
+          fullBill,
         })
         .catch((smsErr) => {
           console.error(

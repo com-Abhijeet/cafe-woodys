@@ -1,4 +1,4 @@
-// Cafe Woody's — Web Fallback Printer Handling
+import { triggerRawBTIntent } from '../rawbtPrinter';
 
 export function webFallback(formattedText) {
   try {
@@ -60,14 +60,14 @@ export function webFallback(formattedText) {
         printWindow.print();
         printWindow.close();
       }, 400);
+      return { success: true, isWebFallback: true };
+    } else {
+      console.warn("Web popup print window blocked by browser. Triggering RawBT fallback...");
+      return triggerRawBTIntent(formattedText);
     }
-    return { success: true, isWebFallback: true };
   } catch (err) {
     console.warn("Web print window blocked or failed:", err.message);
-    return {
-      success: false,
-      isWebFallback: true,
-      message: "Web popup print preview blocked by browser settings.",
-    };
+    return triggerRawBTIntent(formattedText);
   }
 }
+

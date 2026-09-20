@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSettingsContext } from '../../../context/SettingsContext';
 import { apiClient } from '../../../lib/apiClient';
-import { printReceipt, printKitchenSlip } from '../../../lib/print/PrintService';
+import { printReceipt, printKitchenSlip, printParcelDualSlips } from '../../../lib/print/PrintService';
 import { useBackHandler } from '../../../lib/native/backHandler';
 import { CustomerResolveField } from '../../customers/components/CustomerResolveField';
 import { KitchenStatusWarningModal } from './KitchenStatusWarningModal';
@@ -320,37 +320,36 @@ export function BillingView({ tableId, initialBill = null, onBack, onBillSettled
 
       // Resolve print automation settings for customer receipt and KOT slip
       const isParcel = savedBill.orderType === 'PARCEL' || !savedBill.table;
-      let shouldPrintReceipt = Boolean(businessProfile?.alwaysSaveAndPrint);
-      let shouldPrintKot = false;
 
       if (isParcel) {
         try {
+          await printParcelDualSlips(savedBill);
+        } catch (pErr) {
+          console.error('Takeaway dual slip auto-print error:', pErr);
+        }
+      } else {
+        let shouldPrintReceipt = Boolean(businessProfile?.alwaysSaveAndPrint);
+        let shouldPrintKot = false;
+        try {
           const ksRes = await apiClient('/kitchen-print-settings').catch(() => null);
-          shouldPrintKot = Boolean(ksRes?.printWithParcelBill || ksRes?.printOnEveryOrder);
+          shouldPrintKot = Boolean(ksRes?.printOnEveryOrder);
         } catch (e) {
           console.warn('Failed to fetch kitchen print settings:', e);
         }
-      }
 
-      if (shouldPrintReceipt && shouldPrintKot && isParcel) {
-        try {
-          await printReceipt(savedBill);
-          await new Promise((resolve) => setTimeout(resolve, 800));
-          await printKitchenSlip(savedBill);
-        } catch (pErr) {
-          console.error('Dual slip auto-print error:', pErr);
+        if (shouldPrintReceipt) {
+          try {
+            await printReceipt(savedBill);
+          } catch (pErr) {
+            console.error('Receipt auto-print error:', pErr);
+          }
         }
-      } else if (shouldPrintReceipt) {
-        try {
-          await printReceipt(savedBill);
-        } catch (pErr) {
-          console.error('Receipt auto-print error:', pErr);
-        }
-      } else if (shouldPrintKot) {
-        try {
-          await printKitchenSlip(savedBill);
-        } catch (pErr) {
-          console.error('KOT auto-print error:', pErr);
+        if (shouldPrintKot) {
+          try {
+            await printKitchenSlip(savedBill);
+          } catch (pErr) {
+            console.error('KOT auto-print error:', pErr);
+          }
         }
       }
 

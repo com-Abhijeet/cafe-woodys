@@ -230,30 +230,47 @@ export function formatKitchenSlipText(orderOrBill = {}, options = {}) {
   const lines = [];
 
   const dailyNum = orderOrBill.dailyOrderNumber || orderOrBill.invoiceNumber || 'N/A';
-  lines.push(doubleDivider);
-  lines.push(centerText('*** KITCHEN PREP SLIP ***', width));
-  lines.push(centerText(`Order #${dailyNum}`, width));
-  lines.push(divider);
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+  const dateStr = now.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: '2-digit' });
 
   const tableObj = orderOrBill.table || options.table;
   const tableName = tableObj?.name || orderOrBill.tableName || options.tableName;
   const zoneName = tableObj?.zone?.name || options.zoneName || options.table?.zone?.name;
   const isParcel = orderOrBill.orderType === 'PARCEL' || (!tableName && !tableObj && !options.tableName);
 
+  // 1. TOP HEADER & TIMESTAMP
+  lines.push(doubleDivider);
+  lines.push(centerText('*** KITCHEN ORDER TICKET (KOT) ***', width));
+  lines.push(centerText(`Time: ${timeStr}  |  Date: ${dateStr}`, width));
+  lines.push(divider);
+
+  // 2. LARGE & BOLD TABLE / TAKEAWAY PROMINENT HEADER
   if (isParcel) {
+    lines.push(centerText('=================================', width));
     lines.push(centerText('>>> TAKEAWAY / PARCEL <<<', width));
+    lines.push(centerText(`ORDER #${dailyNum}`, width));
     if (orderOrBill.customer?.name) {
       lines.push(centerText(`Cust: ${orderOrBill.customer.name}`, width));
     }
+    lines.push(centerText('=================================', width));
   } else {
-    lines.push(centerText(`>>> DINE-IN: ${tableName ? tableName.toUpperCase() : 'TABLE'} <<<`, width));
-    if (zoneName) {
-      lines.push(centerText(`Zone: ${zoneName.toUpperCase()}`, width));
-    }
+    const tableHeaderStr = `>>> DINE-IN: TABLE ${tableName ? tableName.toUpperCase() : ''} <<<`;
+    lines.push(centerText('=================================', width));
+    lines.push(centerText(tableHeaderStr, width));
+    lines.push(centerText(`ORDER #${dailyNum}${zoneName ? `  |  ZONE: ${zoneName.toUpperCase()}` : ''}`, width));
+    lines.push(centerText('=================================', width));
   }
-  lines.push(doubleDivider);
 
-  // Extract non-voided items
+  if (orderOrBill.staff?.username) {
+    lines.push(`Staff: ${orderOrBill.staff.username}`);
+  }
+
+  lines.push(doubleDivider);
+  lines.push(centerText('ITEMS PREPARATION LIST', width));
+  lines.push(divider);
+
+  // 3. EXTRACT & FORMAT ACTIVE ITEMS
   let items = orderOrBill.items || [];
   if (!items.length && orderOrBill.orders) {
     items = orderOrBill.orders.flatMap((o) => o.items || []);
@@ -262,19 +279,16 @@ export function formatKitchenSlipText(orderOrBill = {}, options = {}) {
   const activeItems = items.filter((i) => !i.voidedAt);
 
   for (const item of activeItems) {
-    const qtyStr = `${item.quantity}x `;
-    const nameStr = item.menuItem?.name || 'Item';
+    const qtyStr = `[ ${item.quantity} x ] `;
+    const nameStr = (item.menuItem?.name || 'Item').toUpperCase();
     lines.push(`${qtyStr}${nameStr}`);
   }
 
-  lines.push(divider);
-  lines.push(centerText(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), width));
   lines.push(doubleDivider);
-  lines.push('');
-  lines.push('');
   lines.push('');
   lines.push('');
   lines.push('');
 
   return sanitizeThermalText(lines.join('\n'));
 }
+

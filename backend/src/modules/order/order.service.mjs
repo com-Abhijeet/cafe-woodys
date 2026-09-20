@@ -251,12 +251,19 @@ export const orderService = {
       items: preparedItems
     });
 
-    if (orderType === 'DINE_IN' && tableId && table && table.status === 'FREE') {
-      const updatedTable = await tableRepository.update(tableId, { status: 'OCCUPIED' });
-      broadcastTableUpdate({ ...table, ...updatedTable });
-    }
+    // Non-blocking background execution for table status update and WebSocket broadcasts
+    setImmediate(async () => {
+      try {
+        if (orderType === 'DINE_IN' && tableId && table && table.status === 'FREE') {
+          const updatedTable = await tableRepository.update(tableId, { status: 'OCCUPIED' });
+          broadcastTableUpdate({ ...table, ...updatedTable });
+        }
+        broadcastOrderCreated(createdOrder);
+      } catch (err) {
+        console.error('Error in post-order background tasks:', err);
+      }
+    });
 
-    broadcastOrderCreated(createdOrder);
     return createdOrder;
   },
 
