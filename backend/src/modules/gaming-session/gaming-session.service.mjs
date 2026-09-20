@@ -184,7 +184,18 @@ export const gamingSessionService = {
       graceMinutes
     );
 
-    const closed = await gamingSessionRepository.closeSession(sessionId, targetEndTime);
+    let closed = await gamingSessionRepository.closeSession(sessionId, targetEndTime);
+
+    if (calculatedCharge === 0) {
+      closed = await prisma.gamingSession.update({
+        where: { id: sessionId },
+        data: {
+          voidedAt: now,
+          voidReason: 'Zero charge ghost session auto-cleared'
+        }
+      });
+    }
+
     const updatedTable = await tableService.getTableById(tableId);
     broadcastGamingSessionUpdate(closed);
     broadcastTableUpdate(updatedTable);

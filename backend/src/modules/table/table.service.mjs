@@ -24,7 +24,7 @@ export async function canTableBeFreed(tableId, tx = prisma) {
   if (!tableId) return false;
   const [openOrders, unbilledSessions] = await Promise.all([
     tx.order.count({ where: { tableId, status: 'OPEN' } }),
-    tx.gamingSession.count({ where: { tableId, billId: null } })
+    tx.gamingSession.count({ where: { tableId, billId: null, voidedAt: null } })
   ]);
   return openOrders === 0 && unbilledSessions === 0;
 }
