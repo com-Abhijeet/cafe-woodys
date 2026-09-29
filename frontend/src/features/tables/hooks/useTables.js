@@ -1,6 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
-import { listTablesApi, createTableApi, updateTableApi, deleteTableApi } from '../api/tables.api';
-import { useWebSocket } from '../../../hooks/useWebSocket';
+import { useState, useEffect, useCallback } from "react";
+import {
+  listTablesApi,
+  createTableApi,
+  updateTableApi,
+  deleteTableApi,
+} from "../api/tables.api";
+import { useWebSocket } from "../../../hooks/useWebSocket";
 
 export function useTables(selectedZoneId = null) {
   const [tables, setTables] = useState([]);
@@ -8,16 +13,16 @@ export function useTables(selectedZoneId = null) {
   const [error, setError] = useState(null);
   const { subscribe } = useWebSocket();
 
-  const fetchTables = useCallback(async () => {
+  const fetchTables = useCallback(async (isBackground = false) => {
     try {
-      setIsLoading(true);
+      if (!isBackground) setIsLoading(true);
       setError(null);
       const data = await listTablesApi(selectedZoneId);
       setTables(data);
     } catch (err) {
-      setError(err.message);
+      if (!isBackground) setError(err.message);
     } finally {
-      setIsLoading(false);
+      if (!isBackground) setIsLoading(false);
     }
   }, [selectedZoneId]);
 
@@ -27,8 +32,8 @@ export function useTables(selectedZoneId = null) {
 
   // Realtime WebSocket Subscription
   useEffect(() => {
-    const unsubscribe = subscribe('TABLE_UPDATED', () => {
-      fetchTables();
+    const unsubscribe = subscribe("TABLE_UPDATED", () => {
+      fetchTables(true);
     });
     return unsubscribe;
   }, [subscribe, fetchTables]);
@@ -57,6 +62,6 @@ export function useTables(selectedZoneId = null) {
     refreshTables: fetchTables,
     addTable,
     editTable,
-    removeTable
+    removeTable,
   };
 }

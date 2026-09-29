@@ -23,8 +23,22 @@ export async function detectConnector() {
 // Phase 21 Step 3: Resolves dedicated printer or falls back from KITCHEN -> BILLING printer
 export async function resolvePrinterConfig(purpose = 'BILLING') {
   try {
-    const res = await apiClient('/printer-configs');
-    const printers = Array.isArray(res) ? res : (res?.data || []);
+    let printers = [];
+    try {
+      const raw = localStorage.getItem('cafe_woodys_settings_cache');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed?.printerConfigs) && parsed.printerConfigs.length > 0) {
+          printers = parsed.printerConfigs;
+        }
+      }
+    } catch (e) {}
+
+    if (printers.length === 0) {
+      const res = await apiClient('/printer-configs');
+      printers = Array.isArray(res) ? res : (res?.data || []);
+    }
+
     // Prioritize enabled default printer for requested purpose
     let target =
       printers.find((p) => p.purpose === purpose && p.isEnabled && p.isDefault) ||

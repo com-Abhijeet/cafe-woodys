@@ -5,11 +5,26 @@ import { apiClient } from '../lib/apiClient';
 
 const SettingsContext = createContext(null);
 
+const SETTINGS_CACHE_KEY = 'cafe_woodys_settings_cache';
+
+function getInitialSettingsCache() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 export function SettingsProvider({ children }) {
   const { user } = useAuth();
   const { subscribe } = useWebSocketContext();
 
-  const [settings, setSettings] = useState({
+  const initialCache = getInitialSettingsCache();
+
+  const [settings, setSettings] = useState(initialCache || {
     businessProfile: null,
     taxSettings: null,
     paymentSettings: null,
@@ -20,7 +35,7 @@ export function SettingsProvider({ children }) {
     loyaltySettings: null
   });
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!initialCache);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastRefetched, setLastRefetched] = useState(null);
 
@@ -50,16 +65,25 @@ export function SettingsProvider({ children }) {
         apiClient('/loyalty-settings').catch(() => null)
       ]);
 
-      setSettings({
-        businessProfile,
-        taxSettings,
-        paymentSettings,
-        orderSettings,
-        gamingSettings,
-        printerConfigs: Array.isArray(printerConfigs) ? printerConfigs : [],
-        kitchenPrintSettings,
-        loyaltySettings
+      setSettings((prev) => {
+        const newSettings = {
+          businessProfile: businessProfile || prev.businessProfile,
+          taxSettings: taxSettings || prev.taxSettings,
+          paymentSettings: paymentSettings || prev.paymentSettings,
+          orderSettings: orderSettings || prev.orderSettings,
+          gamingSettings: gamingSettings || prev.gamingSettings,
+          printerConfigs: Array.isArray(printerConfigs) ? printerConfigs : prev.printerConfigs,
+          kitchenPrintSettings: kitchenPrintSettings || prev.kitchenPrintSettings,
+          loyaltySettings: loyaltySettings || prev.loyaltySettings
+        };
+        try {
+          localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(newSettings));
+        } catch (e) {
+          console.warn('Failed to save settings to localStorage:', e);
+        }
+        return newSettings;
       });
+
       setLastRefetched(new Date());
     } catch (err) {
       console.error('Failed to fetch settings in SettingsContext:', err);
@@ -67,7 +91,7 @@ export function SettingsProvider({ children }) {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
     if (user) {
@@ -75,31 +99,61 @@ export function SettingsProvider({ children }) {
     }
   }, [user, fetchAllSettings]);
 
-  // Real-time WebSocket listener for SETTINGS_UPDATED
+  // Real-time WebSocket listener for SETTINGS_UPDATED & PRINTERS_UPDATED
   useEffect(() => {
     if (!user || !subscribe) return;
 
-    const unsub = subscribe('SETTINGS_UPDATED', (payload) => {
+    const unsubSettings = subscribe('SETTINGS_UPDATED', (payload) => {
       console.log('📡 Real-time settings update received via WebSocket:', payload);
       fetchAllSettings(true);
     });
 
+    const unsubPrinters = subscribe('PRINTERS_UPDATED', (payload) => {
+      console.log('📡 Real-time printers update received via WebSocket:', payload);
+      fetchAllSettings(true);
+    });
+
     return () => {
-      if (unsub) unsub();
+      if (unsubSettings) unsubSettings();
+      if (unsubPrinters) unsubPrinters();
     };
   }, [user, subscribe, fetchAllSettings]);
 
   const updateSettingModule = useCallback((moduleName, data) => {
-    setSettings((prev) => ({
-      ...prev,
-      [moduleName]: data
-    }));
+    setSettings((prev) => {
+      const updated = { ...prev, [moduleName]: data };
+      try {
+        localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
   }, []);
+
+  const getPrinterByPurpose = useCallback((purpose = 'BILLING') => {
+    const printers = settings.printerConfigs || [];
+    let target = printers.find((p) => p.purpose === purpose && p.isEnabled && p.isDefault) ||
+                 printers.find((p) => p.purpose === purpose && p.isEnabled);
+
+    if (!target && purpose === 'KITCHEN') {
+      target = printers.find((p) => p.purpose === 'BILLING' && p.isEnabled && p.isDefault) ||
+               printers.find((p) => p.purpose === 'BILLING' && p.isEnabled);
+    }
+    return target || null;
+  }, [settings.printerConfigs]);
 
   return (
     <SettingsContext.Provider
       value={{
         settings,
+        businessProfile: settings.businessProfile,
+        taxSettings: settings.taxSettings,
+        paymentSettings: settings.paymentSettings,
+        orderSettings: settings.orderSettings,
+        gamingSettings: settings.gamingSettings,
+        printerConfigs: settings.printerConfigs,
+        kitchenPrintSettings: settings.kitchenPrintSettings,
+        loyaltySettings: settings.loyaltySettings,
+        getPrinterByPurpose,
         isLoading,
         isRefreshing,
         lastRefetched,

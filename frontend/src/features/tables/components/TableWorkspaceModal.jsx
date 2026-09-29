@@ -30,7 +30,7 @@ export function TableWorkspaceModal({ table, onClose, onRefreshTable }) {
   // Active Workspace Tab when in 'ORDERING' mode: 'ORDER' | 'GAMING'
   const [activeModalTab, setActiveModalTab] = useState('ORDER');
 
-  const { items: menuItems, isLoading: isMenuLoading } = useMenu();
+  const { items: menuItems, isLoading: isMenuLoading, error: menuError, refreshMenu } = useMenu();
   const { orders, unbilledFoodTotal, submitOrder, refreshOrders } = useOrders(table.id);
 
   const [selectedCategory, setSelectedCategory] = useState('ALL');
@@ -208,6 +208,8 @@ export function TableWorkspaceModal({ table, onClose, onRefreshTable }) {
                     onAddToCart={handleAddToCart}
                     onUpdateCartQty={handleUpdateCartQty}
                     isLoading={isMenuLoading}
+                    error={menuError}
+                    onRetry={refreshMenu}
                   />
                 </div>
               </div>

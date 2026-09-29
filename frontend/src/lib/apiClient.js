@@ -9,8 +9,12 @@ export async function apiClient(endpoint, { body, headers: customHeaders, ...cus
     ...customHeaders
   };
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), customConfig.timeout || 12000);
+
   const config = {
     method: body ? 'POST' : 'GET',
+    signal: customConfig.signal || controller.signal,
     ...customConfig,
     headers
   };
@@ -40,12 +44,19 @@ export async function apiClient(endpoint, { body, headers: customHeaders, ...cus
 
     return data.data;
   } catch (err) {
+    if (err.name === 'AbortError') {
+      const timeoutErr = new Error('Request timed out. Please check server/WiFi connection.');
+      timeoutErr.code = 'TIMEOUT_ERROR';
+      throw timeoutErr;
+    }
     if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
       const offlineErr = new Error('Unable to connect to server. Please check network/WiFi connection.');
       offlineErr.code = 'NETWORK_ERROR';
       throw offlineErr;
     }
     throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 

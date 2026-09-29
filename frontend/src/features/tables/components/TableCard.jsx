@@ -1,7 +1,8 @@
+import { memo } from 'react';
 import { Users, Gamepad2, ShoppingBag, AlertTriangle, Tag } from 'lucide-react';
 import styles from './TableCard.module.css';
 
-export function TableCard({ table, onStatusChange, onClick }) {
+function TableCardComponent({ table, onStatusChange, onClick }) {
   const isGaming = table.zone?.type === 'GAMING';
   const accentClass = isGaming ? styles.gamingAccent : styles.cafeAccent;
   const badgeClass = isGaming ? styles.gamingBadge : styles.cafeBadge;
@@ -108,3 +109,13 @@ export function TableCard({ table, onStatusChange, onClick }) {
     </div>
   );
 }
+
+export const TableCard = memo(TableCardComponent, (prev, next) => {
+  return (
+    prev.table.id === next.table.id &&
+    prev.table.status === next.table.status &&
+    prev.table.updatedAt === next.table.updatedAt &&
+    prev.table.activePlayersCount === next.table.activePlayersCount &&
+    prev.table.hasOpenOrders === next.table.hasOpenOrders
+  );
+});

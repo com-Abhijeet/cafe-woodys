@@ -158,22 +158,27 @@ export const billingService = {
     let openOrders = [];
     let unbilledSessions = [];
 
-    if (targetId) {
-      table = await prisma.table.findUnique({
-        where: { id: targetId },
-        include: { zone: true },
-      });
-    }
+    const [
+      tableRes,
+      openOrdersRes,
+      unbilledSessionsRes,
+      taxSettings,
+      gamingSettings,
+      unfinishedKitchenOrders,
+    ] = await Promise.all([
+      targetId ? prisma.table.findUnique({ where: { id: targetId }, include: { zone: true } }) : null,
+      targetId ? prisma.order.findMany({ where: { tableId: targetId, status: "OPEN" }, include: { items: { include: { menuItem: true } } } }) : [],
+      targetId ? prisma.gamingSession.findMany({ where: { tableId: targetId, billId: null, voidedAt: null } }) : [],
+      taxSettingsService.getSettings(),
+      gamingSettingsService.getSettings(),
+      this.checkKitchenStatus(targetId),
+    ]);
 
-    if (table) {
-      openOrders = await prisma.order.findMany({
-        where: { tableId: targetId, status: "OPEN" },
-        include: { items: { include: { menuItem: true } } },
-      });
-      unbilledSessions = await prisma.gamingSession.findMany({
-        where: { tableId: targetId, billId: null, voidedAt: null },
-      });
-    } else if (targetId) {
+    table = tableRes;
+    openOrders = openOrdersRes;
+    unbilledSessions = unbilledSessionsRes;
+
+    if (!table && targetId && openOrders.length === 0) {
       const singleOrder = await prisma.order.findUnique({
         where: { id: targetId },
         include: { items: { include: { menuItem: true } } },
@@ -194,13 +199,6 @@ export const billingService = {
         "NOT_FOUND",
       );
     }
-
-    const [taxSettings, gamingSettings, unfinishedKitchenOrders] =
-      await Promise.all([
-        taxSettingsService.getSettings(),
-        gamingSettingsService.getSettings(),
-        this.checkKitchenStatus(targetId),
-      ]);
     const graceMinutes = gamingSettings?.gamingGracePeriodMinutes ?? 5;
     const pricesIncludeTax = Boolean(taxSettings?.pricesIncludeTax);
     const now = new Date();

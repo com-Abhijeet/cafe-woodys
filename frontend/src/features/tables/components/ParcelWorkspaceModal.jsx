@@ -21,7 +21,7 @@ export function ParcelWorkspaceModal({ existingOrder = null, onClose, onRefreshT
       onClose();
     }
   });
-  const { items: menuItems, isLoading: isMenuLoading } = useMenu();
+  const { items: menuItems, isLoading: isMenuLoading, error: menuError, refreshMenu } = useMenu();
 
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [cart, setCart] = useState([]);
@@ -178,6 +178,8 @@ export function ParcelWorkspaceModal({ existingOrder = null, onClose, onRefreshT
                   onAddToCart={handleAddToCart}
                   onUpdateCartQty={handleUpdateCartQty}
                   isLoading={isMenuLoading}
+                  error={menuError}
+                  onRetry={refreshMenu}
                 />
               </div>
             </div>

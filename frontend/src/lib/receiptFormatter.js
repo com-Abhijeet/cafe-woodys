@@ -192,6 +192,35 @@ export function formatReceiptText(bill = {}, options = {}) {
   lines.push(padRight('GRAND TOTAL:', width - amountColWidth) + padLeft(`Rs.${(grandTotalPaise / 100).toFixed(2)}`, amountColWidth));
   lines.push(divider);
 
+  // UPI QR Code Section for Amount Due
+  let paymentSettings = options.paymentSettings || bill.paymentSettings || {};
+  if (!paymentSettings.upiId) {
+    try {
+      const raw = localStorage.getItem('cafe_woodys_settings_cache');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.paymentSettings?.upiId) {
+          paymentSettings = parsed.paymentSettings;
+        }
+      }
+    } catch (e) {}
+  }
+
+  const upiId = paymentSettings.upiId;
+  const rawPayeeName = paymentSettings.upiPayeeName || profile.businessName || "Cafe Woodys";
+  const cleanPayeeName = rawPayeeName.replace(/[^a-zA-Z0-9 ]/g, '').trim() || "Cafe Woodys";
+  const totalPaidPaise = (bill.payments || []).reduce((sum, p) => sum + p.amount, 0);
+  const duePaise = Math.max(0, grandTotalPaise - totalPaidPaise);
+
+  if (upiId && duePaise > 0) {
+    const dueAmountRs = (duePaise / 100).toFixed(2);
+    const upiUri = `upi://pay?pa=${upiId.trim()}&pn=${encodeURIComponent(cleanPayeeName)}&am=${dueAmountRs}&cu=INR`;
+    lines.push(centerText('SCAN & PAY VIA UPI', width));
+    lines.push(`[QR]: ${upiUri}`);
+    lines.push(centerText(`UPI ID: ${upiId.trim()}`, width));
+    lines.push(divider);
+  }
+
   // Payments History
   if (bill.payments?.length > 0) {
     lines.push('PAID VIA:');

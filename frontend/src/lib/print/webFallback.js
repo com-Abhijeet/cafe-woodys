@@ -1,16 +1,24 @@
+import QRCode from 'qrcode';
 import { triggerRawBTIntent } from '../rawbtPrinter';
 
-export function webFallback(formattedText) {
+export async function webFallback(formattedText) {
   try {
-    const htmlBody = formattedText
+    let htmlBody = formattedText
       .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/\[QR\]:\s*(upi:\/\/[^\s\n]+)/g, (_, uri) => {
-        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
-          uri,
-        )}`;
-        return `</pre><div style="text-align:center; margin: 12px 0;"><img src="${qrUrl}" width="180" height="180" style="display:inline-block; margin:0 auto;" /></div><pre style="font-family: monospace; font-size: 12px; margin:0;">`;
-      });
+      .replace(/>/g, "&gt;");
+
+    const qrMatches = [...htmlBody.matchAll(/\[QR\]:\s*(upi:\/\/[^\r\n]+)/g)];
+    for (const match of qrMatches) {
+      const fullTag = match[0];
+      const uri = match[1].trim();
+      try {
+        const dataUrl = await QRCode.toDataURL(uri, { width: 180, margin: 1 });
+        const imgHtml = `</pre><div style="text-align:center; margin: 10px 0;"><img src="${dataUrl}" width="160" height="160" style="display:inline-block; margin:0 auto;" /></div><pre style="font-family: monospace; font-size: 11px; margin:0;">`;
+        htmlBody = htmlBody.replace(fullTag, () => imgHtml);
+      } catch (e) {
+        console.warn('Failed to generate offline QR image:', e);
+      }
+    }
 
     const printWindow = window.open("", "_blank", "width=400,height=600");
     if (printWindow) {

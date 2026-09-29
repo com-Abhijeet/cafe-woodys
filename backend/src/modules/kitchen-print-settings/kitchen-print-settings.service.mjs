@@ -1,4 +1,4 @@
-import { kitchenPrintSettingsRepository } from './kitchen-print-settings.repository.mjs';
+import { kitchenPrintSettingsRepository } from "./kitchen-print-settings.repository.mjs";
 
 export const kitchenPrintSettingsService = {
   async getSettings() {
@@ -7,5 +7,5 @@ export const kitchenPrintSettingsService = {
 
   async updateSettings(data) {
     return kitchenPrintSettingsRepository.updateSettings(data);
-  }
+  },
 };

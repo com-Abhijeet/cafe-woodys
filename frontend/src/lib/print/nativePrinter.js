@@ -105,7 +105,20 @@ export async function listAvailablePrintersNative() {
   return result;
 }
 
+// Global sequential queue chain to prevent WiFi print job collisions
+let printQueueChain = Promise.resolve();
+
 export async function printNative(formattedText, printerConfig = {}) {
+  // Enforce sequential print execution
+  return new Promise((resolve, reject) => {
+    printQueueChain = printQueueChain
+      .then(() => executePrintNativeWithRetry(formattedText, printerConfig))
+      .then(resolve)
+      .catch(reject);
+  });
+}
+
+async function executePrintNativeWithRetry(formattedText, printerConfig = {}, attempt = 1) {
   const connectionType = (printerConfig.connectionType || "TCP").toLowerCase();
   const ip = printerConfig.ipAddress || "192.168.1.100";
 
@@ -153,8 +166,8 @@ export async function printNative(formattedText, printerConfig = {}) {
     const preparedText =
       "\x1B\x45\x01" +
       cleanText.replace(
-        /\[QR\]:\s*(upi:\/\/[^\s\n]+)/g,
-        (_, uri) => `<qr size="6">${uri}</qr>`,
+        /\[QR\]:\s*(upi:\/\/[^\r\n]+)/g,
+        (_, uri) => `<qr size="6">${uri.trim()}</qr>`,
       );
 
     const paperWidth = Number(printerConfig.paperWidthMm) || 80;
@@ -177,7 +190,6 @@ export async function printNative(formattedText, printerConfig = {}) {
       if (Capacitor.isNativePlatform()) {
         await requestBluetoothPermissionsNative();
       }
-      // CRITICAL: ThermalPrinterCordovaPlugin matches bluetooth device using payload.id against address (MAC) or name!
       const btTarget = printerConfig.ipAddress || printerConfig.name || "first";
       payload = {
         type: "bluetooth",
@@ -208,7 +220,6 @@ export async function printNative(formattedText, printerConfig = {}) {
 
     // 6-Second Timeout Safeguard so unreachable printers never hang checkout screen
     const printPromise = new Promise((resolve, reject) => {
-      // Use printFormattedTextAndCut to feed paper 25mm and trigger ESC/POS auto-cut
       const printMethod =
         ThermalPrinter.printFormattedTextAndCut ||
         ThermalPrinter.printFormattedText;
@@ -247,8 +258,17 @@ export async function printNative(formattedText, printerConfig = {}) {
 
     return await Promise.race([printPromise, timeoutPromise]);
   } catch (err) {
+    const isNetworkOrPipeErr =
+      /broken pipe|epipe|econnreset|closed|socket|timeout|unreachable/i.test(err.message || "");
+
+    if (isNetworkOrPipeErr && attempt < 3) {
+      console.warn(`WiFi Print Attempt ${attempt} failed (${err.message}). Retrying in 350ms...`);
+      await new Promise((res) => setTimeout(res, 350));
+      return executePrintNativeWithRetry(formattedText, printerConfig, attempt + 1);
+    }
+
     console.warn(
-      `Native direct ${connectionType} printing failed: ${err.message}`,
+      `Native direct ${connectionType} printing failed after ${attempt} attempts: ${err.message}`,
     );
     if (Capacitor.isNativePlatform()) {
       alert(
