@@ -4,6 +4,9 @@
   "description": "Cafe Woody's Backend API",
   "main": "src/server.mjs",
   "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "build": "prisma generate",
     "start": "node src/server.mjs",
